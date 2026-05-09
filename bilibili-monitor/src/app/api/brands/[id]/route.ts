@@ -7,6 +7,7 @@ import {
   getVideosByBrand,
   getBrandMonthlyStats,
 } from "@/lib/db";
+import { requireEditor } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
@@ -52,6 +53,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireEditor(request);
+
     const { id } = await params;
     const body = await request.json();
     const { name } = body;
@@ -67,6 +70,9 @@ export async function PUT(
     updateBrand(parseInt(id), name);
     return NextResponse.json({ success: true, data: { id: parseInt(id), name } });
   } catch (error) {
+    if (error instanceof NextResponse) {
+      throw error;
+    }
     console.error("Error updating brand:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update brand" },
@@ -80,6 +86,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireEditor(request);
+
     const { id } = await params;
     const brand = getBrandById(parseInt(id));
 
@@ -93,6 +101,9 @@ export async function DELETE(
     deleteBrand(parseInt(id));
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof NextResponse) {
+      throw error;
+    }
     console.error("Error deleting brand:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete brand" },

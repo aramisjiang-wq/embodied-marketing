@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBrandsWithStats, createBrand, deleteBrand, updateBrand } from "@/lib/db";
+import { requireEditor } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -16,6 +17,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireEditor(request);
+
     const body = await request.json();
     const { mid, name } = body;
 
@@ -29,6 +32,9 @@ export async function POST(request: NextRequest) {
     const brand = createBrand(mid, name);
     return NextResponse.json({ success: true, data: brand }, { status: 201 });
   } catch (error) {
+    if (error instanceof NextResponse) {
+      throw error;
+    }
     console.error("Error creating brand:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create brand" },

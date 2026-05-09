@@ -193,3 +193,92 @@ export async function isAuthenticated(): Promise<boolean> {
   const session = await getSession();
   return session !== null;
 }
+
+import { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+/**
+ * 权限检查辅助函数 - 用于API路由中验证用户角色
+ * 
+ * @param request Next.js请求对象
+ * @param allowedRoles 允许访问的角色列表
+ * @returns { session: AuthSession } 验证通过的用户会话
+ * @throws NextResponse 如果未登录或权限不足，直接返回错误响应
+ * 
+ * @example
+ * // 在API路由中使用：
+ * export async function POST(request: NextRequest) {
+ *   const { session } = await requireRole(request, ["admin", "editor"]);
+ *   // 只有 admin 和 editor 才能执行到这里
+ *   
+ *   const body = await request.json();
+ *   // ... 业务逻辑
+ * }
+ */
+export async function requireRole(
+  request: NextRequest,
+  allowedRoles: ("admin" | "editor" | "viewer")[]
+): Promise<{ session: AuthSession }> {
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+
+  if (!sessionCookie?.value) {
+    throw NextResponse.json(
+      { success: false, error: "Not authenticated. Please login first." },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const session: AuthSession = JSON.parse(sessionCookie.value);
+
+    if (session.expires_at < Date.now()) {
+      throw NextResponse.json(
+        { success: false, error: "Session expired. Please login again." },
+        { status: 401 }
+      );
+    }
+
+    if (session.user.status === "disabled") {
+      throw NextResponse.json(
+        { success: false, error: "Account has been disabled. Contact administrator." },
+        { status: 403 }
+      );
+    }
+
+    if (!allowedRoles.includes(session.user.role)) {
+      throw NextResponse.json(
+        {
+          success: false,
+          error: `Insufficient permissions. Required roles: [${allowedRoles.join(", ")}], Your role: ${session.user.role}`,
+        },
+        { status: 403 }
+      );
+    }
+
+    return { session };
+  } catch (error) {
+    if (error instanceof NextResponse) {
+      throw error;
+    }
+    
+    console.error("[Auth/requireRole] Failed to parse session:", error);
+    throw NextResponse.json(
+      { success: false, error: "Invalid session. Please login again." },
+      { status: 401 }
+    );
+  }
+}
+
+/**
+ * 快捷方法：要求管理员权限
+ */
+export async function requireAdmin(request: NextRequest): Promise<{ session: AuthSession }> {
+  return requireRole(request, ["admin"]);
+}
+
+/**
+ * 快捷方法：要求编辑者或管理员权限
+ */
+export async function requireEditor(request: NextRequest): Promise<{ session: AuthSession }> {
+  return requireRole(request, ["admin", "editor"]);
+}

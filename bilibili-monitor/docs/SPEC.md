@@ -360,6 +360,12 @@ CREATE INDEX idx_action_logs_user ON action_logs(user_id);
 | **`/api/collect-status`** | **GET** | **获取采集实时状态** | **已登录** | **v2.6.0** |
 | `/api/trends` | GET | 获取趋势数据 | 已登录 | v2.0 |
 | `/api/brands/validate` | GET | 验证B站MID | 已登录 | v2.2 |
+| **其他业务接口 (v2.x 补充)** |
+| `/api/collect-history` | GET | 获取采集历史记录 | 已登录 | v2.x.x |
+| `/api/page-view` | GET/POST | 页面访问统计 | 已登录 | v2.x.x |
+| `/api/site-stats` | GET | 站点整体统计数据 | 已登录 | v2.x.x |
+| `/api/system-status` | GET | 系统运行状态信息 | 已登录 | v2.x.x |
+| `/api/this-week-videos` | GET | 本周新增视频列表 | 已登录 | v2.x.x |
 
 ### 3.2 接口详细设计
 
