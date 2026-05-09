@@ -22,6 +22,7 @@ export default function LoginPage() {
     "idle" | "scanning" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(error);
+  const [sdkTimeout, setSdkTimeout] = useState(false);
   const qrContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +44,12 @@ export default function LoginPage() {
 
         setAuthUrl(data.data.auth_url);
 
+        // 设置8秒超时，超时后显示备用登录按钮
+        const timeoutId = setTimeout(() => {
+          setSdkTimeout(true);
+          setLoading(false);
+        }, 8000);
+
         if (!window.QRLogin) {
           const script = document.createElement("script");
           script.src =
@@ -50,16 +57,19 @@ export default function LoginPage() {
           script.async = true;
 
           script.onload = () => {
+            clearTimeout(timeoutId);
             renderQRCode(data.data.auth_url);
           };
 
           script.onerror = () => {
-            setErrorMessage("Failed to load Feishu QR SDK");
+            clearTimeout(timeoutId);
+            setSdkTimeout(true);
             setLoading(false);
           };
 
           document.head.appendChild(script);
         } else {
+          clearTimeout(timeoutId);
           renderQRCode(data.data.auth_url);
         }
       } catch (err) {
@@ -152,9 +162,10 @@ export default function LoginPage() {
 
           {/* QR Code Section */}
           <div className="flex flex-col items-center">
-            {loading ? (
-              <div className="w-[280px] h-[280px] flex items-center justify-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            {loading && !sdkTimeout ? (
+              <div className="w-[280px] h-[280px] flex flex-col items-center justify-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                <Loader2 className="w-8 h-8 text-gray-400 animate-spin mb-3" />
+                <p className="text-xs text-gray-400">正在加载飞书二维码...</p>
               </div>
             ) : errorMessage ? (
               <div className="w-[280px] h-[280px] flex flex-col items-center justify-center bg-red-50 rounded-xl border border-red-200 p-6">
@@ -171,6 +182,27 @@ export default function LoginPage() {
                 >
                   重试
                 </button>
+              </div>
+            ) : sdkTimeout ? (
+              <div className="w-[280px] h-[280px] flex flex-col items-center justify-center bg-blue-50 rounded-xl border border-blue-200 p-6">
+                <QrCode className="w-12 h-12 text-blue-400 mb-3" />
+                <p className="text-sm text-blue-600 text-center font-medium mb-2">
+                  二维码加载超时
+                </p>
+                <p className="text-xs text-blue-400 text-center mb-4">
+                  请使用下方按钮手动登录
+                </p>
+                {authUrl && (
+                  <a
+                    href={authUrl}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors btn"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18 2h-3a5 5 0 00-5 5v3H7a4 4 0 00-4 4v10a4 4 0 004 4h10a4 4 0 004-4v-3a5 5 0 00-5-5h-3M8 12h8"/>
+                    </svg>
+                    点击跳转飞书登录
+                  </a>
+                )}
               </div>
             ) : (
               <>
