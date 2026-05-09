@@ -20,10 +20,12 @@ set -euo pipefail
 # 配置区 - 根据实际情况修改
 # ============================================
 SERVER_USER="root"
-SERVER_HOST="120.76.204.224"
-SERVER_DIR="/opt/bilibili-monitor"
+SERVER_HOST="101.200.222.139"
+SERVER_DIR="/opt/embodied-marketing"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BACKUP_DIR="/opt/bilibili-monitor/backups"
+BACKUP_DIR="/opt/embodied-marketing/backups"
+APP_PORT=8082
+PM2_APP_NAME="embodied-marketing"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="deploy_${TIMESTAMP}.log"
 
@@ -451,8 +453,8 @@ set -euo pipefail
 cd /opt/bilibili-monitor
 
 # 尝试 pm2 重启
-if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "bilibili"; then
-  pm2 restart bilibili-monitor 2>&1
+if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "${PM2_APP_NAME}"; then
+  pm2 restart ${PM2_APP_NAME} 2>&1
   echo "RESTART_PM2"
 # 尝试 systemctl 重启
 elif systemctl is-enabled bilibili-monitor.service &>/dev/null; then
@@ -499,7 +501,7 @@ log_info "步骤9/10: 执行健康检查..."
 if $DRY_RUN; then
   log_warn "[DRY-RUN] 跳过健康检查"
 else
-  HEALTH_CHECK_URL="http://${SERVER_HOST}:3000/api/overview"
+  HEALTH_CHECK_URL="http://${SERVER_HOST}:${APP_PORT}/api/overview"
   
   # 等待服务完全启动
   sleep 3
@@ -591,10 +593,10 @@ if [ "${DEPLOYMENT_STATUS:-PENDING}" = "FAILED" ]; then
 else
   echo ""
   echo "✅ 部署成功！下一步："
-  echo "  1. 访问系统: http://${SERVER_HOST}:3000/login"
+  echo "  1. 访问系统: http://${SERVER_HOST}:${APP_PORT}/login"
   echo "  2. 使用飞书扫码登录测试"
   echo "  3. 验证功能: 创建/编辑/删除品牌"
-  echo "  4. 查看管理员后台: http://${SERVER_HOST}:3000/admin"
+  echo "  4. 查看管理员后台: http://${SERVER_HOST}:${APP_PORT}/admin"
   echo ""
   echo "🎉 恭喜！B站竞品监控系统 v2.31.0 已成功部署！"
 fi

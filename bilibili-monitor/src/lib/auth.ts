@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import {
   findOrCreateUser,
   updateUserLogin,
@@ -193,9 +195,6 @@ export async function isAuthenticated(): Promise<boolean> {
   const session = await getSession();
   return session !== null;
 }
-
-import { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
 
 /**
  * 权限检查辅助函数 - 用于API路由中验证用户角色

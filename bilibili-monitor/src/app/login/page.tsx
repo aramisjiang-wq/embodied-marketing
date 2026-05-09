@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Shield, QrCode, AlertCircle, Loader2 } from "lucide-react";
@@ -11,7 +11,7 @@ declare global {
   }
 }
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
@@ -262,5 +262,34 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
+              <Image
+                src="/logo.png"
+                alt="LimX Marketing"
+                width={48}
+                height={48}
+                className="w-12 h-12 object-contain"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">LimX Marketing</h1>
+            <p className="text-sm text-gray-500">B站竞品监控系统</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-xl p-8 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
