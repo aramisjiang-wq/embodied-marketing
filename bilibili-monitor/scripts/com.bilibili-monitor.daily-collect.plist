@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bilibili-monitor.daily-collect</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/dong/Downloads/Codebase/LimX Code/Embodied Marketing/bilibili-monitor/scripts/daily_collect.sh</string>
+    </array>
+
+    <!-- 每天凌晨 00:05 运行（避免整点高峰） -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>5</integer>
+    </dict>
+
+    <!-- 工作目录 -->
+    <key>WorkingDirectory</key>
+    <string>/Users/dong/Downloads/Codebase/LimX Code/Embodied Marketing/bilibili-monitor</string>
+
+    <!-- 环境变量 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/dong</string>
+    </dict>
+
+    <!-- 标准输出和错误日志 -->
+    <key>StandardOutPath</key>
+    <string>/Users/dong/Downloads/Codebase/LimX Code/Embodied Marketing/bilibili-monitor/scripts/logs/launchd.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dong/Downloads/Codebase/LimX Code/Embodied Marketing/bilibili-monitor/scripts/logs/launchd.stderr.log</string>
+</dict>
+</plist>

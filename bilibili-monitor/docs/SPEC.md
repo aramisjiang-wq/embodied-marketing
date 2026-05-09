@@ -1,0 +1,827 @@
+# B站竞品监控 SPEC
+
+> 文档版本：v2.31
+> 创建日期：2026-05-06
+> 最后更新：2026-05-09
+> 状态：已发布（v2.31.0）
+
+---
+
+## 1. 技术架构
+
+### 1.1 技术栈
+
+| 层级 | 技术选型 | 说明 |
+|------|----------|------|
+| 前端框架 | Next.js 16 | App Router, TypeScript |
+| UI组件 | shadcn/ui | Tailwind CSS |
+| 后端 | Next.js API Routes | Serverless |
+| 数据库 | SQLite | 轻量，易部署 |
+| 数据采集 | Python bilibili-api | 异步HTTP |
+| 图表 | Recharts | 开源React图表库 |
+
+### 1.2 系统架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    前端 (Next.js)                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
+│  │  Dashboard  │  │  品牌详情    │  │  品牌管理   │   │
+│  └─────────────┘  └─────────────┘  └─────────────┘   │
+│  ┌─────────────┐  ┌─────────────┐                     │
+│  │  登录页面    │  │  管理后台    │ (仅admin可见)     │
+│  │  /login     │  │  /admin     │                     │
+│  └─────────────┘  └─────────────┘                     │
+├─────────────────────────────────────────────────────────┤
+│                   中间件层                              │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │         middleware.ts (路由保护)                  │  │
+│  │  检查 Session Cookie → 验证身份 → 读取角色       │  │
+│  └─────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────┤
+│                   API Routes                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
+│  │ /api/brands │  │ /api/overview│  │ /api/compare│   │
+│  ├─────────────┤  ├─────────────┤  ├─────────────┤   │
+│  │ /api/auth/* │  │ /api/admin/*│  │ /api/collect│   │
+│  └─────────────┘  └─────────────┘  └─────────────┘   │
+├─────────────────────────────────────────────────────────┤
+│                   数据库层 (SQLite)                    │
+│  ┌──────────┐  ┌──────────────────────────────────┐  │
+│  │ users 表  │  │ 业务数据表                        │  │
+│  │ (用户账号) │  │ brands/videos/video_stats/...   │  │
+│  ├──────────┤  ├──────────────────────────────────┤  │
+│  │login_logs│  │                                  │  │
+│  │action_logs│  │                                  │  │
+│  └──────────┘  └──────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────┤
+│              数据采集层 (Python)                        │
+│  ┌─────────────┐  ┌─────────────┐                     │
+│  │ bilibili-api│  │ curl_cffi   │                     │
+│  └─────────────┘  └─────────────┘                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**架构说明（v2.31.0 新增）**：
+- ✅ **单产品架构**：1个 Next.js 应用，不是2个独立产品
+- ✅ **统一入口**：飞书扫码登录（OAuth 2.0）
+- ✅ **中间件保护**：所有业务路由需通过认证
+- ✅ **角色权限**：Session 中携带 role 字段，控制 UI 和 API 访问
+- ✅ **数据隔离**：users 表存用户信息，brands/videos 存业务数据
+
+### 1.3 目录结构
+
+```
+bilibili-monitor/
+├── docs/                    # 文档
+│   ├── PRD.md              # 产品需求文档（v2.31）
+│   └── SPEC.md             # 技术规格文档（v2.31）
+├── scripts/
+│   └── collect.py          # Python数据采集脚本
+├── src/
+│   ├── app/
+│   │   ├── api/           # API接口
+│   │   │   ├── auth/      # 认证相关API (v2.31.0新增)
+│   │   │   │   ├── feishu/route.ts      # 获取飞书授权URL
+│   │   │   │   ├── callback/route.ts    # 飞书回调处理
+│   │   │   │   ├── logout/route.ts      # 退出登录
+│   │   │   │   └── session/route.ts     # 获取当前会话
+│   │   │   ├── admin/     # 管理员API (v2.31.0新增)
+│   │   │   │   ├── users/
+│   │   │   │   │   ├── route.ts          # 用户列表CRUD
+│   │   │   │   │   └── [id]/route.ts     # 单用户操作
+│   │   │   │   └── users/stats/route.ts  # 用户统计
+│   │   │   ├── brands/    # 品牌CRUD
+│   │   │   ├── compare/   # 对比API
+│   │   │   ├── collect/   # 采集触发
+│   │   │   └── overview/  # 总览API
+│   │   ├── (dashboard)/  # 受保护的路由组
+│   │   │   ├── admin/    # 管理员后台页面 (v2.31.0新增)
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── compare/
+│   │   │   └── brands/
+│   │   ├── login/        # 登录页面 (v2.31.0新增)
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── ui/           # shadcn组件
+│   │   └── ...
+│   └── lib/
+│       ├── auth.ts       # 认证核心库 (v2.31.0新增)
+│       ├── user-db.ts    # 用户数据库操作 (v2.31.0新增)
+│       ├── db.ts         # 数据库操作（含users表Schema）
+│       ├── collector.ts   # 采集器调用
+│       └── types.ts      # TypeScript类型
+├── middleware.ts          # 路由中间件 (v2.31.0新增)
+├── bilibili_monitor.db    # SQLite数据库（含users表）
+└── package.json
+```
+
+---
+
+## 2. 数据库设计
+
+### 2.1 ER图
+
+```
+┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+│   brands   │       │   videos    │       │ video_stats │
+├─────────────┤       ├─────────────┤       ├─────────────┤
+│ id (PK)    │──────<│ id (PK)    │       │ id (PK)    │
+│ mid        │       │ bvid       │       │ video_id(FK)│
+│ name       │       │ brand_id(FK)│>──────│ stat_date  │
+│ created_at │       │ title      │       │ view       │
+│ updated_at │       │ pub_ts     │       │ like       │
+└─────────────┘       │ pub_date   │       │ coin       │
+                       │ created_at │       │ favorite   │
+                       └─────────────┘       │ reply      │
+                                              │ danmaku    │
+┌─────────────┐                               │ share      │
+│ brand_stats │                               └─────────────┘
+├─────────────┤
+│ id (PK)    │
+│ brand_id(FK)│>──────┐
+│ stat_date  │       │
+│ follower   │       │
+│ following  │       │
+└─────────────┘       │
+```
+
+### 2.2 表结构
+
+#### brands
+```sql
+CREATE TABLE brands (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mid TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### videos
+```sql
+CREATE TABLE videos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bvid TEXT UNIQUE NOT NULL,
+  brand_id INTEGER NOT NULL,
+  title TEXT,
+  pub_ts INTEGER,
+  pub_date DATE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (brand_id) REFERENCES brands(id),
+  UNIQUE(brand_id, bvid)
+);
+```
+
+#### video_stats
+```sql
+CREATE TABLE video_stats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id INTEGER NOT NULL,
+  stat_date DATE NOT NULL,
+  view INTEGER DEFAULT 0,
+  like INTEGER DEFAULT 0,
+  coin INTEGER DEFAULT 0,
+  favorite INTEGER DEFAULT 0,
+  reply INTEGER DEFAULT 0,
+  danmaku INTEGER DEFAULT 0,
+  share INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (video_id) REFERENCES videos(id),
+  UNIQUE(video_id, stat_date)
+);
+```
+
+#### brand_stats
+```sql
+CREATE TABLE brand_stats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  brand_id INTEGER NOT NULL,
+  stat_date DATE NOT NULL,
+  follower INTEGER DEFAULT 0,
+  following INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (brand_id) REFERENCES brands(id),
+  UNIQUE(brand_id, stat_date)
+);
+```
+
+#### users (v2.31.0 新增 - 用户主表)
+> ⚠️ **核心设计：单表存储所有用户，通过 role 字段区分身份**
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 本地用户ID（自增）
+  open_id TEXT UNIQUE NOT NULL,           -- 飞书唯一标识（业务唯一键）
+  union_id TEXT,                         -- 飞书联合标识
+  name TEXT NOT NULL,                     -- 用户姓名
+  en_name TEXT,                          -- 英文名
+  email TEXT,                            -- 工作邮箱
+  mobile TEXT,                           -- 手机号
+  avatar_url TEXT,                       -- 头像URL（飞书CDN）
+  
+  role TEXT DEFAULT 'viewer'             -- 角色
+    CHECK(role IN ('admin', 'editor', 'viewer')),
+    -- 'admin' = 管理员（管人、管权限）
+    -- 'editor' = 编辑者（能编辑品牌数据）
+    -- 'viewer' = 查看者（只能看数据）
+    
+  status TEXT DEFAULT 'active'           -- 状态
+    CHECK(status IN ('active', 'disabled')),
+    -- 'active' = 正常可登录
+    -- 'disabled' = 已禁用（登录时提示"账号已被禁用"）
+    
+  last_login_at TIMESTAMP,               -- 最后登录时间
+  login_count INTEGER DEFAULT 0,         -- 累计登录次数
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 索引
+CREATE INDEX idx_users_open_id ON users(open_id);      -- 加速按open_id查找
+CREATE INDEX idx_users_email ON users(email);            -- 加速按邮箱搜索
+CREATE INDEX idx_users_role ON users(role);              -- 按角色筛选用户
+```
+
+**设计决策说明**：
+- ✅ 单表设计（不是 admin_users + normal_users 两张表）
+- ✅ `open_id` 作为业务唯一键（飞书保证全局唯一）
+- ✅ `id` 作为本地主键（自增，用于关联其他表）
+- ✅ `role` 和 `status` 是权限控制的核心字段
+
+---
+
+#### login_logs (v2.31.0 新增 - 登录日志表)
+```sql
+CREATE TABLE login_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,              -- 关联 users.id
+  ip_address TEXT,                       -- 登录IP地址
+  user_agent TEXT,                       -- 浏览器User-Agent
+  login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 索引
+CREATE INDEX idx_login_logs_user ON login_logs(user_id);   -- 查询某用户的登录历史
+CREATE INDEX idx_login_logs_time ON login_logs(login_at);   -- 查询最近登录记录
+```
+
+**用途**：
+- 安全审计（异常登录检测）
+- 活跃度统计（日活/月活）
+- 问题排查（用户反馈"登不上"时查看）
+
+---
+
+#### action_logs (v2.31.0 新增 - 操作日志表)
+```sql
+CREATE TABLE action_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,              -- 操作执行者
+  action TEXT NOT NULL,                  -- 操作类型
+    -- 'login' / 'logout'
+    -- 'create_user' / 'update_user' / 'delete_user'
+    -- 'update_role' / 'toggle_status'
+    -- 'create_brand' / 'update_brand' / 'delete_brand'
+    
+  target_type TEXT,                     -- 操作对象类型
+    -- 'user' / 'brand' / 'system'
+    
+  target_id INTEGER,                    -- 操作对象ID
+  details TEXT,                         -- 详细信息（JSON格式）
+  ip_address TEXT,                      -- 操作IP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 索引
+CREATE INDEX idx_action_logs_user ON action_logs(user_id);  -- 查询某用户的操作历史
+```
+
+**用途**：
+- 操作追溯（谁在什么时候改了什么）
+- 合规审计（满足企业安全要求）
+- 数据恢复（误操作的回滚依据）
+
+### 2.3 索引
+```sql
+-- 业务数据索引
+CREATE INDEX idx_videos_brand ON videos(brand_id);
+CREATE INDEX idx_videos_pubdate ON videos(pub_date);
+CREATE INDEX idx_video_stats_video ON video_stats(video_id);
+CREATE INDEX idx_video_stats_date ON video_stats(stat_date);
+CREATE INDEX idx_brand_stats_brand ON brand_stats(brand_id);
+
+-- 用户管理索引 (v2.31.0 新增)
+CREATE INDEX idx_users_open_id ON users(open_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_login_logs_user ON login_logs(user_id);
+CREATE INDEX idx_login_logs_time ON login_logs(login_at);
+CREATE INDEX idx_action_logs_user ON action_logs(user_id);
+```
+
+---
+
+## 3. API设计
+
+### 3.1 接口列表
+
+| 接口 | 方法 | 描述 | 权限 | 版本 |
+|------|------|------|------|------|
+| **认证相关 (v2.31.0 新增)** |
+| `/api/auth/feishu` | GET | 获取飞书授权URL | 公开 | v2.31.0 |
+| `/api/auth/callback` | GET | 飞书OAuth2回调处理 | 公开 | v2.31.0 |
+| `/api/auth/logout` | POST/GET | 退出登录 | 已登录 | v2.31.0 |
+| `/api/auth/session` | GET | 获取当前会话信息 | 已登录 | v2.31.0 |
+| **管理员功能 (v2.31.0 新增)** |
+| `/api/admin/users` | GET | 获取所有用户列表 | admin | v2.31.0 |
+| `/api/admin/users/[id]` | PATCH | 修改用户角色/状态 | admin | v2.31.0 |
+| `/api/admin/users/[id]` | DELETE | 删除用户 | admin | v2.31.0 |
+| `/api/admin/users/stats` | GET | 获取用户统计数据 | admin | v2.31.0 |
+| **业务数据** |
+| `/api/brands` | GET | 获取所有品牌 | 已登录 | v1.0 |
+| `/api/brands` | POST | 创建品牌 | editor+ | v1.0 |
+| `/api/brands/[id]` | GET | 获取单个品牌 | 已登录 | v1.0 |
+| `/api/brands/[id]` | PUT | 更新品牌 | editor+ | v1.0 |
+| `/api/brands/[id]` | DELETE | 删除品牌 | editor+ | v1.0 |
+| `/api/overview` | GET | 获取总览数据 | 已登录 | v1.0 |
+| `/api/compare` | GET | 获取对比数据 | 已登录 | v2.0 |
+| `/api/collect` | POST | 触发数据采集 | editor+ | v1.0 |
+| **`/api/collect-status`** | **GET** | **获取采集实时状态** | **已登录** | **v2.6.0** |
+| `/api/trends` | GET | 获取趋势数据 | 已登录 | v2.0 |
+| `/api/brands/validate` | GET | 验证B站MID | 已登录 | v2.2 |
+
+### 3.2 接口详细设计
+
+#### GET /api/brands
+**响应**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "mid": "521974986",
+      "name": "宇树科技",
+      "follower": 831016,
+      "video_count": 16,
+      "total_views": 52156440,
+      "last_update": "2026-05-06"
+    }
+  ]
+}
+```
+
+#### POST /api/brands
+**请求**
+```json
+{
+  "mid": "521974986",
+  "name": "宇树科技"
+}
+```
+**响应**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "mid": "521974986",
+    "name": "宇树科技"
+  }
+}
+```
+
+#### GET /api/overview
+**响应**
+```json
+{
+  "success": true,
+  "data": {
+    "brands": [...],
+    "summary": {
+      "totalBrands": 9,
+      "totalVideos": 45,
+      "totalViews": 125000000,
+      "totalFollowers": 2500000
+    },
+    "monthlyStats": [...]
+  }
+}
+```
+
+#### GET /api/collect-status ⭐ **v2.6.0新增**
+
+**描述**：获取数据采集系统的实时运行状态
+
+**响应**
+```json
+{
+  "success": true,
+  "data": {
+    "is_running": false,
+    "started_at": null,
+    "current_brand": null,
+    "current_brand_progress": "0/0",
+    "total_brands": 13,
+    "completed_brands": 0,
+    "current_step": "空闲",
+    "message": "系统就绪，等待下次采集 (每天零点自动运行)",
+    "logs": []
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| is_running | boolean | 是否正在采集数据 |
+| started_at | string \| null | 采集开始时间（ISO 8601格式） |
+| current_brand | string \| null | 当前正在处理的品牌名称 |
+| current_brand_progress | string | 当前进度（如"3/13"） |
+| total_brands | number | 需要采集的总品牌数 |
+| completed_brands | number | 已完成采集的品牌数 |
+| current_step | string | 当前执行步骤描述 |
+| message | string | 状态消息（用于UI展示） |
+| logs | Array\<LogEntry\> | 操作日志数组（最多保留最近100条） |
+
+**日志条目结构 (LogEntry)**：
+```typescript
+interface LogEntry {
+  time: string;      // ISO 8601时间戳
+  level: 'info' | 'warning' | 'error';  // 日志级别
+  brand: string;     // 品牌名称
+  message: string;   // 操作描述
+}
+```
+
+**使用场景**：
+- Dashboard页面实时显示采集进度
+- 采集中：显示进度条、当前品牌、完成百分比
+- 空闲时：显示"就绪"状态和下次采集时间
+
+**轮询策略**：
+- 仅在 `is_running=true` 时前端每3秒轮询一次
+- 空闲状态不轮询，节省资源
+- 组件卸载时自动清理定时器
+
+---
+
+## 4. 页面设计
+
+### 4.1 页面列表
+
+| 页面 | 路由 | 描述 |
+|------|------|------|
+| 仪表盘 | `/dashboard` | 总览所有品牌数据 |
+| 品牌列表 | `/brands` | 品牌管理列表 |
+| 品牌详情 | `/brand/[id]` | 单品牌详细数据 |
+| 对比页面 | `/compare` | 品牌横向对比 |
+
+### 4.2 页面结构
+
+#### 仪表盘 (`/dashboard`)
+```
+┌─────────────────────────────────────────────────────────┐
+│  Header: B站竞品监控                    [添加品牌] [设置] │
+├─────────────────────────────────────────────────────────┤
+│  汇总指标卡片                                          │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐     │
+│  │品牌数   │ │视频总数 │ │总播放   │ │总粉丝   │     │
+│  │  9     │ │  45    │ │ 1.2亿  │ │ 250万  │     │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘     │
+├─────────────────────────────────────────────────────────┤
+│  品牌排行                                              │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ 排名 │ 品牌      │ 粉丝数  │ 月播放   │ 趋势     │ │
+│  │  1  │ 宇树科技   │ 83万   │ 5200万  │ 📈 +12% │ │
+│  │  2  │ 银河通用   │ 12万   │ 890万   │ 📈 +8%  │ │
+│  │  3  │ 越疆科技   │ 8万    │ 560万   │ 📉 -3%  │ │
+│  └─────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│  月度趋势图                                            │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │         月度播放量趋势 (折线图)                   │ │
+│  │    📈                                           │ │
+│  │  5200 ─────────────────────────────────────    │ │
+│  │       1月   2月   3月   4月   5月              │ │
+│  └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 品牌详情 (`/brand/[id]`)
+```
+┌─────────────────────────────────────────────────────────┐
+│  ← 返回  宇树科技                          [编辑] [删除]│
+├─────────────────────────────────────────────────────────┤
+│  基础指标                                              │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                   │
+│  │粉丝数   │ │关注数   │ │视频数   │                   │
+│  │ 83万   │ │  31    │ │  16    │                   │
+│  └─────────┘ └─────────┘ └─────────┘                   │
+├─────────────────────────────────────────────────────────┤
+│  月度趋势                                              │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │         宇树科技月度表现                          │ │
+│  │    📊 柱状图: 播放量 + 发布量                    │ │
+│  └─────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────┤
+│  视频列表                                              │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │ 标题        │ 发布日期  │ 播放  │ 点赞 │ 收藏  │ │
+│  │ 视频A       │ 2026-05  │ 650万 │ 14万 │ 8.5万 │ │
+│  │ 视频B       │ 2026-04  │ 556万 │ 14万 │ 7.2万 │ │
+│  └─────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. 组件设计
+
+### 5.1 核心组件
+
+| 组件 | 描述 | Props | 版本 |
+|------|------|-------|------|
+| `StatCard` | 指标卡片 | title, value, trend, icon | v1.0 |
+| `BrandCard` | 品牌卡片 | brand数据 | v1.0 |
+| `TrendChart` | 趋势图表 | data, type(bar/line) | v1.0 |
+| `VideoTable` | 视频列表 | videos数组 | v1.0 |
+| `BrandSelector` | 品牌选择器 | selected, onChange | v2.0 |
+| `DateRangePicker` | 日期范围 | startDate, endDate, onChange | Phase 2 |
+| **`CollectProgress`** | **采集进度可视化** | **className** | **v2.6.0** |
+| `BrandHeatmap` | 热力图 | data, metric, title | v2.2 |
+| `BrandScatterPlot` | 散点图 | data, title, onBrandClick | v2.0 |
+| `BrandRankingTable` | 排名表 | data, title | v2.0 |
+| `ComparisonChart` | 对比柱状图 | data, metric | v1.0 |
+| `AddBrandModal` | 添加品牌弹窗 | isOpen, onClose, onAdd | v1.0 |
+
+### 5.2 组件示例
+
+```tsx
+// StatCard
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  trend?: number; // 百分比变化
+  icon?: ReactNode;
+}
+
+// TrendChart
+interface TrendChartProps {
+  data: MonthlyStat[];
+  type: 'bar' | 'line';
+  metrics: ('views' | 'videos')[];
+}
+
+// CollectProgress ⭐ v2.6.0新增
+interface CollectProgressProps {
+  className?: string; // 自定义样式类名
+}
+
+// 内部状态接口（从API获取）
+interface CollectStatus {
+  is_running: boolean;
+  started_at: string | null;
+  current_brand: string | null;
+  current_brand_progress: string; // e.g., "3/13"
+  total_brands: number;
+  completed_brands: number;
+  current_step: string; // e.g., "获取用户信息", "获取动态列表"
+  message: string; // 当前正在做什么
+  logs: Array<{
+    time: string;
+    level: 'info' | 'warning' | 'error';
+    brand: string;
+    message: string;
+  }>;
+}
+```
+
+---
+
+## 6. 数据采集流程
+
+### 6.1 采集流程
+
+```
+1. 初始化
+   ├── 读取品牌列表 (brands表)
+   └── 初始化bilibili-api (curl_cffi)
+
+2. 品牌数据采集 (循环)
+   ├── 获取关系信息 (粉丝/关注)
+   ├── 存储 brand_stats
+   │
+   ├── 获取动态列表
+   │   └── get_dynamics_new() + offset分页
+   │
+   ├── 提取视频信息
+   │   └── bvid, title, pub_ts
+   │
+   ├── 存储新视频
+   │   └── videos表
+   │
+   └── 获取视频详情 (新视频)
+       └── video.get_info() → stat
+       └── 存储 video_stats
+```
+
+### 6.2 更新频率策略
+
+| 数据类型 | 更新频率 | 自动化方式 | 请求次数/品牌 |
+|----------|----------|-----------|--------------|
+| 粉丝/关注 | **每日 00:00** | **Cron自动任务** | 1次 |
+| 动态列表 | **每日 00:00** | **Cron自动任务** | 5-10次 (分页) |
+| 视频详情 | **每日 00:00** | **Cron自动任务** | 新视频数 |
+
+**自动化架构（v2.6.0）**：
+```
+┌─────────────────────────────────────────────────────┐
+│                  定时任务调度器                       │
+│  ┌─────────────┐                                    │
+│  │ macOS launchd│ 或 Linux crontab                   │
+│  │ 每天 00:00  │                                    │
+│  └──────┬──────┘                                    │
+│         ▼                                           │
+│  ┌─────────────────────────────┐                    │
+│  │   daily_collect.sh          │                    │
+│  │   - 激活Python虚拟环境       │                    │
+│  │   - 运行collect.py          │                    │
+│  │   - 记录日志到文件           │                    │
+│  └──────────────┬──────────────┘                    │
+│                 ▼                                     │
+│  ┌─────────────────────────────┐                    │
+│  │   collect.py (采集脚本)      │                    │
+│  │   - 写入状态到JSON文件      │ ←── 实时状态        │
+│  │   - 循环处理每个品牌         │     (collect_status.json)
+│  │   - 更新SQLite数据库        │                    │
+│  └─────────────────────────────┘                    │
+│                 │                                     │
+│                 ▼                                     │
+│  ┌─────────────────────────────┐                    │
+│  │   /api/collect-status API   │ ←── 前端轮询       │
+│  │   读取JSON状态文件          │     (每3秒)        │
+│  └─────────────────────────────┘                    │
+└─────────────────────────────────────────────────────┘
+```
+
+**总请求量估算 (13个品牌)**：
+- 每日自动运行: 1次
+- 总请求量: 约 100-200次/天
+- 运行时间: 约 5-10分钟（含智能延迟）
+
+**状态文件路径**：`scripts/collect_status.json`
+
+### 6.3 防封策略
+
+1. 使用 curl_cffi 模拟浏览器指纹
+2. 请求间隔 0.5-1秒
+3. 每日总请求量控制在 2000 以内
+4. 异常时自动降级频率
+
+---
+
+## 7. 状态管理
+
+### 7.1 全局状态
+
+```tsx
+// 使用React Context管理
+interface AppState {
+  brands: BrandWithStats[];
+  selectedBrandId: number | null;
+  dateRange: { start: Date; end: Date };
+}
+```
+
+### 7.2 页面状态
+
+- Dashboard: brands列表, summary数据
+- BrandDetail: brand信息, videos列表, monthlyStats
+- Compare: selectedBrands, compareData
+
+---
+
+## 8. 错误处理
+
+### 8.1 API错误
+
+```json
+{
+  "success": false,
+  "error": "错误描述",
+  "code": "ERROR_CODE"
+}
+```
+
+### 8.2 错误码
+
+| 错误码 | 说明 | 处理方式 |
+|--------|------|----------|
+| BRAND_NOT_FOUND | 品牌不存在 | 返回404 |
+| MID_DUPLICATED | MID已存在 | 提示用户 |
+| COLLECT_FAILED | 采集失败 | 重试或报警 |
+| VIDEO_NOT_FOUND | 视频不存在 | 跳过 |
+
+---
+
+## 9. 部署方案
+
+### 9.1 开发环境
+- 本地运行 Next.js dev server
+- 本地 SQLite 数据库
+
+### 9.2 生产环境
+- Vercel 部署 Next.js
+- Railway/Render 部署 SQLite
+- 或自建服务器
+
+### 9.3 定时任务 ⭐ **v2.6.0完善**
+
+#### 自动化采集任务
+
+**运行频率**：每天 00:00 (零点)
+
+**配置方法**：
+
+##### 方法1：macOS launchd（推荐）
+```bash
+# 1. 创建plist文件
+cat > ~/Library/LaunchAgents/com.bilibili-monitor.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bilibili-monitor.daily-collect</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/dong/.../daily_collect.sh</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/path/to/logs/stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/logs/stderr.log</string>
+</dict>
+</plist>
+EOF
+
+# 2. 加载任务
+launchctl load ~/Library/LaunchAgents/com.bilibili-monitor.plist
+
+# 3. 验证
+launchctl list | grep bilibili-monitor
+```
+
+##### 方法2：Linux crontab
+```bash
+# 编辑crontab
+crontab -e
+
+# 添加以下行
+0 0 * * * /path/to/bilibili-monitor/scripts/daily_collect.sh
+```
+
+**日志监控**：
+```bash
+# 查看最新日志
+ls -lt scripts/logs/cron_*.log | head -1
+
+# 实时查看日志
+tail -f scripts/logs/cron_*.log
+```
+
+**手动测试**：
+```bash
+# 手动运行采集脚本（测试用）
+./scripts/daily_collect.sh
+
+# 检查状态文件是否生成
+cat scripts/collect_status.json
+```
+
+**详细配置指南**：参见 [CRON_SETUP_GUIDE.md](../docs/CRON_SETUP_GUIDE.md)

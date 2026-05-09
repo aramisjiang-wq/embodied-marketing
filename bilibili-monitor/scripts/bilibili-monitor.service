@@ -1,0 +1,44 @@
+[Unit]
+Description=Bilibili Competitor Monitor - Daily Data Collection Service
+Documentation=https://github.com/your-repo/bilibili-monitor/docs/AUTOMATION_GUIDE.md
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# 工作目录（根据实际部署路径修改）
+WorkingDirectory=/opt/bilibili-monitor/scripts
+
+# 执行命令
+ExecStart=/opt/bilibili-monitor/venv/bin/python /opt/bilibili-monitor/scripts/collect.py
+
+# 环境变量
+Environment="PATH=/opt/bilibili-monitor/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="DB_PATH=/opt/bilibili-monitor/bilibili_monitor.db"
+Environment="LOG_DIR=/opt/bilibili-monitor/logs"
+
+# 标准输出重定向到日志文件
+StandardOutput=append:/opt/bilibili-monitor/logs/systemd-stdout.log
+StandardError=append:/opt/bilibili-monitor/logs/systemd-stderr.log
+
+# 重启策略：失败后自动重启
+Restart=on-failure
+RestartSec=300  # 失败后等待5分钟再重启
+
+# 资源限制
+TimeoutStartSec=3600  # 单次运行最长1小时（正常约33分钟）
+MemoryMax=2G  # 内存限制2GB
+CPUQuota=80%  # CPU使用率限制80%
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bilibili-monitor
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+{
+  "is_running": false,
+  "started_at": null,
+  "current_brand": null,
+  "current_brand_progress": "0/0",
+  "total_brands": 0,
+  "completed_brands": 0,
+  "current_step": "空闲",
+  "message": "系统就绪，等待下次采集 (每天零点自动运行)",
+  "logs": [],
+  "last_run_summary": {
+    "total_videos": 136,
+    "success_count": 13,
+    "total_brands": 13,
+    "duration": 1144.8,
+    "completed_at": "2026-05-09T09:30:56.701095"
+  }
+}

@@ -1,0 +1,23 @@
+[Unit]
+Description=Bilibili Monitor - Daily Collection Timer (00:05 AM)
+Documentation=https://github.com/your-repo/bilibili-monitor/docs/AUTOMATION_GUIDE.md
+
+# 依赖服务单元
+Requires=bilibili-monitor.service
+After=bilibili-monitor.service
+
+[Timer]
+# 每天凌晨 00:05 执行（避开整点高峰）
+OnCalendar=*-*-* 00:05:00
+
+# 随机延迟0-300秒（5分钟），避免多台服务器同时执行
+AccuracySec=300s
+
+# 如果错过时间（如服务器关机），启动后立即补执行
+Persistent=true
+
+# 单位：秒。如果任务还在运行，不会重复触发（防止并发）
+Unit=bilibili-monitor.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,157 @@
+name: 🚀 Deploy to Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_NAME: embodied-marketing
+  DEPLOY_DIR: /opt/${{ vars.PROJECT_NAME || 'embodied-marketing' }}
+  PORT: ${{ vars.PORT || '3001' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🌐 Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📦 Sync files to server
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude '__pycache__' \
+            --exclude '*.db' \
+            --exclude 'venv' \
+            --exclude 'logs' \
+            --exclude '.env*' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            bilibili-monitor/ \
+            ${SERVER_USER}@${SERVER_HOST}:${{ env.DEPLOY_DIR }}/
+
+      - name: 🔧 Install dependencies & build on server
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
+          set -e
+
+          cd ${{ env.DEPLOY_DIR }}
+
+          echo "📦 Installing Node.js dependencies..."
+          if [ ! -d "node_modules" ]; then
+            npm install --production=false
+          else
+            npm install --production=false
+          fi
+
+          echo "🏗️ Building Next.js application..."
+          npm run build
+
+          echo "🐍 Setting up Python environment..."
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+          source venv/bin/activate
+          pip install --upgrade pip > /dev/null 2>&1
+          pip install -r scripts/requirements.txt 2>/dev/null || true
+          deactivate
+
+          echo "✅ Build completed successfully!"
+          ENDSSH
+
+      - name: 🔄 Restart services on server
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
+          set -e
+
+          cd ${{ env.DEPLOY_DIR }}
+
+          echo "🛑 Stopping existing service (if running)..."
+          systemctl stop embodied-marketing 2>/dev/null || true
+          pkill -f "next start.*port=${{ env.PORT }}" 2>/dev/null || true
+          sleep 2
+
+          echo "🚀 Starting Next.js production server on port ${{ env.PORT }}..."
+          nohup npm run start -- -p ${{ env.PORT }} > logs/server.log 2>&1 &
+
+          echo "⏰ Configuring Systemd Timer for data collection..."
+          # Update service file with correct paths
+          sed -i "s|/opt/bilibili-monitor|${{ env.DEPLOY_DIR }}|g" scripts/bilibili-monitor.service
+          cp scripts/bilibili-monitor.service /etc/systemd/system/embodied-marketing.service
+
+          # Reload and enable timer
+          systemctl daemon-reload
+          systemctl enable embodied-marketing.service 2>/dev/null || true
+
+          echo "✅ Service restarted successfully!"
+          echo ""
+          echo "📊 Server Status:"
+          ps aux | grep "next start.*port=${{ env.PORT }}" | grep -v grep || echo "⚠️ Process not found (may need manual check)"
+          ENDSSH
+
+      - name: ✅ Verify deployment
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          sleep 5
+          ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
+          echo "=========================================="
+          echo "  🎉 Deployment Verification"
+          echo "=========================================="
+          echo ""
+
+          # Check if process is running
+          if pgrep -f "next start.*port=${{ env.PORT }}" > /dev/null; then
+              echo "✅ Next.js server is RUNNING on port ${{ env.PORT }}"
+          else
+              echo "❌ Next.js server is NOT running"
+              exit 1
+          fi
+
+          echo ""
+          echo "📍 Access URL: http://${{ secrets.SERVER_HOST }}:${{ env.PORT }}"
+          echo "🔗 Feishu Callback: http://${{ secrets.SERVER_HOST }}:${{ env.PORT }}/api/auth/callback"
+          echo ""
+          echo "📋 Recent logs:"
+          tail -20 ${{ env.DEPLOY_DIR }}/logs/server.log 2>/dev/null || echo "No logs yet"
+          echo "=========================================="
+          ENDSSH
+
+      - name: 📝 Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Server:** \`${{ secrets.SERVER_HOST }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Port:** \`${{ env.PORT }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Access URLs:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Web App:** http://${{ secrets.SERVER_HOST }}:${{ env.PORT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Feishu Callback:** http://${{ secrets.SERVER_HOST }}:${{ env.PORT }}/api/auth/callback" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. ⚙️ Configure **Nginx** reverse proxy (if needed)" >> $GITHUB_STEP_SUMMARY
+          echo "2. 🔐 Set up **Feishu OAuth** callback URL in Feishu Console" >> $GITHUB_STEP_SUMMARY
+          echo "3. 👤 Create admin user in database for first login" >> $GITHUB_STEP_SUMMARY
