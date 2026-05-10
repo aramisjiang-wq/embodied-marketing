@@ -32,10 +32,18 @@ function initSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mid TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
+      is_self INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migration: add is_self column to existing databases that predate this field
+  const brandCols = (database.prepare("PRAGMA table_info(brands)").all() as { name: string }[])
+    .map((c) => c.name);
+  if (!brandCols.includes("is_self")) {
+    database.exec("ALTER TABLE brands ADD COLUMN is_self INTEGER DEFAULT 0");
+  }
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS videos (

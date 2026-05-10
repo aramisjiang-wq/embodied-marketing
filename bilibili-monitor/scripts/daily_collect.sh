@@ -5,7 +5,7 @@
 
 set -e
 
-PROJECT_DIR="/Users/dong/Downloads/Codebase/LimX Code/Embodied Marketing/bilibili-monitor"
+PROJECT_DIR="/opt/embodied-marketing"
 LOG_DIR="$PROJECT_DIR/scripts/logs"
 VENV_DIR="$PROJECT_DIR/venv"
 
@@ -19,10 +19,10 @@ echo "========================================" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始执行每日数据采集" >> "$LOG_FILE"
 echo "========================================" >> "$LOG_FILE"
 
-# 激活虚拟环境并运行采集
-cd "$PROJECT_DIR/scripts"
+# cd 到项目根目录确保 bilibili_monitor.db 相对路径正确
+cd "$PROJECT_DIR"
 
-source "$VENV_DIR/bin/activate" && python collect.py >> "$LOG_FILE" 2>&1
+source "$VENV_DIR/bin/activate" && python scripts/collect_v2.py >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
 
