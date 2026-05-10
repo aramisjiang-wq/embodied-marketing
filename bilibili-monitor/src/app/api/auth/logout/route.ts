@@ -23,5 +23,5 @@ export async function POST() {
 
 export async function GET() {
   await destroySession();
-  return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"));
+  return NextResponse.redirect(new URL("/login", process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:8082"));
 }

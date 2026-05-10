@@ -5,7 +5,20 @@ import {
   createSession,
 } from "@/lib/auth";
 
+function getAppBaseUrl(request: NextRequest): string {
+  // Use explicitly configured base URL to avoid 0.0.0.0 bind-address leaking into redirects
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, "");
+  }
+  // Fallback: derive from x-forwarded-host or host header (never from request.url which may contain 0.0.0.0)
+  const proto = request.headers.get("x-forwarded-proto") || "http";
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:8082";
+  return `${proto}://${host}`;
+}
+
 export async function GET(request: NextRequest) {
+  const baseUrl = getAppBaseUrl(request);
+
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get("code");
@@ -13,13 +26,11 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("Feishu auth error:", error);
-      return NextResponse.redirect(
-        new URL(`/login?error=${error}`, request.url)
-      );
+      return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent(error)}`);
     }
 
     if (!code) {
-      return NextResponse.redirect(new URL("/login?error=no_code", request.url));
+      return NextResponse.redirect(`${baseUrl}/login?error=no_code`);
     }
 
     const tokenData = await exchangeCodeForToken(code);
@@ -42,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`User logged in: ${userInfo.name} (${userInfo.email}) from ${ipAddress}`);
 
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(`${baseUrl}/`);
   } catch (error) {
     console.error("Failed to handle Feishu callback:", error);
 
@@ -50,7 +61,7 @@ export async function GET(request: NextRequest) {
       error instanceof Error ? error.message : "Authentication failed";
 
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(errorMessage)}`, request.url)
+      `${baseUrl}/login?error=${encodeURIComponent(errorMessage)}`
     );
   }
 }
