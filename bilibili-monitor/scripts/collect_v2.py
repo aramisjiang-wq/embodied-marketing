@@ -34,6 +34,7 @@ import time
 import hashlib
 import argparse
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
@@ -44,6 +45,13 @@ from dataclasses import dataclass
 
 # 数据库路径
 DB_PATH = "bilibili_monitor.db"
+
+# B站账号凭证（从环境变量读取，防止硬编码泄露）
+# 获取方式：登录 bilibili.com → F12 → Application → Cookies
+# 设置方式：在 .env.local 中添加这三行，或 export 到环境变量
+BILIBILI_SESSDATA = os.environ.get("BILIBILI_SESSDATA", "")
+BILIBILI_BILI_JCT = os.environ.get("BILIBILI_BILI_JCT", "")
+BILIBILI_BUVID3   = os.environ.get("BILIBILI_BUVID3", "")
 
 # 站大爷免费代理API配置（可选，留空则不使用代理）
 ZDAYE_API_URL = "http://open.zdaye.com/FreeProxy/Get/"
@@ -535,8 +543,8 @@ async def process_single_brand_v2(
         select_client("curl_cffi")
         request_settings.set("impersonate", "chrome131")
         
-        # ✅ 关键改进：创建单一的User对象，复用会话
-        u = user.User(uid=int(mid))
+        # ✅ 关键改进：创建单一的User对象，复用会话（带凭证时绕过风控）
+        u = user.User(uid=int(mid), credential=_credential)
         
         # ========================================
         # 步骤1: 获取用户基本信息
@@ -802,6 +810,20 @@ async def main_collection_flow_v2(
         global user, video, select_client
         from bilibili_api import user, video
         from bilibili_api.utils.network import select_client
+
+        # 注入 B站账号凭证（有凭证时绕过风控；无凭证时匿名采集）
+        if BILIBILI_SESSDATA and BILIBILI_BILI_JCT:
+            from bilibili_api import Credential
+            _credential = Credential(
+                sessdata=BILIBILI_SESSDATA,
+                bili_jct=BILIBILI_BILI_JCT,
+                buvid3=BILIBILI_BUVID3 or None,
+            )
+            print(f"  🔑 已加载 B站账号凭证 (SESSDATA: {BILIBILI_SESSDATA[:8]}...)")
+        else:
+            _credential = None
+            print("  ⚠️  未配置 B站凭证，使用匿名模式（可能遭遇风控）")
+            print("  💡 建议在 .env.local 中设置 BILIBILI_SESSDATA / BILIBILI_BILI_JCT")
         
         # 确保日志表存在
         ensure_logs_table_exists()
