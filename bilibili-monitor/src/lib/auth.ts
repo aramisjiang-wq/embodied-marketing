@@ -84,18 +84,27 @@ export async function exchangeCodeForToken(code: string): Promise<{
     }
   );
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to exchange code: ${error}`);
-  }
-
   const data = await response.json();
+  console.log("[Auth] Token exchange response status:", response.status, "body:", JSON.stringify(data));
 
-  if (data.code !== 0) {
-    throw new Error(`Feishu API error: ${data.msg}`);
+  if (!response.ok) {
+    // v2 OAuth standard error format: { error: "...", error_description: "..." }
+    const errMsg = data.error_description || data.error || data.msg || response.statusText;
+    throw new Error(`Token exchange failed: ${errMsg}`);
   }
 
-  return data.data;
+  // authen/v2/oauth/token follows standard OAuth2 — tokens are at the top level,
+  // NOT wrapped in { code, data: { ... } } like the v1 APIs.
+  if (data.access_token) {
+    return data;
+  }
+
+  // Fallback: some Feishu environments still wrap in { code, data }
+  if (data.code === 0 && data.data?.access_token) {
+    return data.data;
+  }
+
+  throw new Error(`Unexpected token response: ${JSON.stringify(data)}`);
 }
 
 export async function getUserInfo(accessToken: string): Promise<FeishuUser> {
