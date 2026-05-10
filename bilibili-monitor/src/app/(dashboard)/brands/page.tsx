@@ -20,15 +20,23 @@ export default function BrandsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const loadBrands = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch("/api/brands");
-        const data = await response.json();
-        if (!cancelled && data.success) {
-          setBrands(data.data || []);
+        const [brandsRes, sessionRes] = await Promise.all([
+          fetch("/api/brands"),
+          fetch("/api/auth/session"),
+        ]);
+        const brandsData = await brandsRes.json();
+        if (!cancelled && brandsData.success) {
+          setBrands(brandsData.data || []);
+        }
+        if (!cancelled && sessionRes.ok) {
+          const sessionData = await sessionRes.json();
+          setIsAdmin(sessionData?.data?.user?.role === "admin");
         }
       } catch {
         // silent
@@ -36,7 +44,7 @@ export default function BrandsPage() {
         if (!cancelled) setLoading(false);
       }
     };
-    loadBrands();
+    loadData();
     return () => { cancelled = true; };
   }, []);
 
@@ -171,15 +179,17 @@ export default function BrandsPage() {
                         >
                           详情
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Trash2 className="w-3.5 h-3.5" />}
-                          onClick={() => handleDelete(brand.id, brand.name)}
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                        >
-                          删除
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                            onClick={() => handleDelete(brand.id, brand.name)}
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            删除
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

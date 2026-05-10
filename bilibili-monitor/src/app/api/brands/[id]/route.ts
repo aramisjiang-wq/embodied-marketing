@@ -7,7 +7,7 @@ import {
   getVideosByBrand,
   getBrandMonthlyStats,
 } from "@/lib/db";
-import { requireEditor } from "@/lib/auth";
+import { requireEditor, requireAdmin } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
@@ -86,7 +86,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireEditor(request);
+    await requireAdmin(request);
 
     const { id } = await params;
     const brand = getBrandById(parseInt(id));

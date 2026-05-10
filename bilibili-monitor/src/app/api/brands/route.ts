@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBrandsWithStats, createBrand, deleteBrand, updateBrand } from "@/lib/db";
-import { requireEditor } from "@/lib/auth";
+import { getBrandsWithStats, createBrand } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -17,7 +17,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireEditor(request);
+    // All logged-in users can add brands (middleware already enforces login)
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    }
 
     const body = await request.json();
     const { mid, name } = body;

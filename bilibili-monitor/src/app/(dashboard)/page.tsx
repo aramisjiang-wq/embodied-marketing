@@ -45,6 +45,8 @@ export default function DashboardPage() {
       completed_at: string;
     } | null;
   } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [triggering, setTriggering] = useState(false);
 
   useEffect(() => {
     if (filterBrands.length > 0) {
@@ -71,6 +73,37 @@ export default function DashboardPage() {
     const interval = setInterval(fetchCollectStatus, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (res.ok) {
+          const data = await res.json();
+          setIsAdmin(data?.data?.user?.role === "admin");
+        }
+      } catch {
+        // silent
+      }
+    };
+    fetchSession();
+  }, []);
+
+  const handleTriggerCollect = async () => {
+    if (triggering || collectStatus?.is_running) return;
+    setTriggering(true);
+    try {
+      const res = await fetch("/api/collect", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data?.error || "触发采集失败");
+      }
+    } catch {
+      alert("触发采集失败，请稍后重试");
+    } finally {
+      setTriggering(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedBrands.length === 0) return;
@@ -179,17 +212,29 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-sm font-medium text-gray-600">数据采集</span>
               </div>
-              {collectStatus?.is_running ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-                  采集中
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">
-                  <CheckCircle className="w-3 h-3" />
-                  就绪
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {collectStatus?.is_running ? (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                    采集中
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">
+                    <CheckCircle className="w-3 h-3" />
+                    就绪
+                  </span>
+                )}
+                {isAdmin && !collectStatus?.is_running && (
+                  <button
+                    onClick={handleTriggerCollect}
+                    disabled={triggering}
+                    className="flex items-center gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-full text-xs font-medium transition-colors"
+                  >
+                    <Activity className="w-3 h-3" />
+                    {triggering ? "触发中..." : "立即采集"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Main Value */}
