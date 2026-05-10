@@ -6,8 +6,9 @@
 set -e
 
 PROJECT_DIR="/opt/embodied-marketing"
-LOG_DIR="$PROJECT_DIR/scripts/logs"
+LOG_DIR="$PROJECT_DIR/bilibili-monitor/scripts/logs"
 VENV_DIR="$PROJECT_DIR/venv"
+ENV_FILE="$PROJECT_DIR/bilibili-monitor/.env.local"
 
 # 确保日志目录存在
 mkdir -p "$LOG_DIR"
@@ -22,7 +23,14 @@ echo "========================================" >> "$LOG_FILE"
 # cd 到项目根目录确保 bilibili_monitor.db 相对路径正确
 cd "$PROJECT_DIR"
 
-source "$VENV_DIR/bin/activate" && python scripts/collect_v2.py >> "$LOG_FILE" 2>&1
+# 加载 .env.local 中的环境变量（含 Bilibili cookies）
+if [ -f "$ENV_FILE" ]; then
+    set -o allexport
+    source "$ENV_FILE"
+    set +o allexport
+fi
+
+source "$VENV_DIR/bin/activate" && python3 bilibili-monitor/scripts/collect_v2.py >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
 

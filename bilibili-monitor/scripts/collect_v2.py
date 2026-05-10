@@ -53,6 +53,9 @@ BILIBILI_SESSDATA = os.environ.get("BILIBILI_SESSDATA", "")
 BILIBILI_BILI_JCT = os.environ.get("BILIBILI_BILI_JCT", "")
 BILIBILI_BUVID3   = os.environ.get("BILIBILI_BUVID3", "")
 
+# 全局 B站凭证对象（在 main_collection_flow_v2 中初始化）
+_credential = None
+
 # 站大爷免费代理API配置（可选，留空则不使用代理）
 ZDAYE_API_URL = "http://open.zdaye.com/FreeProxy/Get/"
 ZDAYE_APP_ID = ""  # 填写你的app_id
@@ -526,22 +529,25 @@ async def process_single_brand_v2(
         # ========================================
         # ✅ 缺陷1 & 4: 配置代理 + 创建持久化会话
         # ========================================
-        from bilibili_api import request_settings
+        from bilibili_api import settings as _bili_settings
         
         if use_proxy:
             proxy_url = proxy_pool.get_random_proxy()
             if proxy_url:
-                request_settings.set("proxies", {"http": proxy_url, "https": proxy_url})
+                _bili_settings.proxy = proxy_url
                 logger.info(f"🌐 使用代理: {proxy_url}")
             else:
                 logger.warning("⚠️ 无可用代理，使用直连")
-                request_settings.set("proxies", {})
+                _bili_settings.proxy = ""
         else:
-            request_settings.set("proxies", {})
+            _bili_settings.proxy = ""
         
-        # 选择HTTP客户端
-        select_client("curl_cffi")
-        request_settings.set("impersonate", "chrome131")
+        # 选择HTTP客户端（仅新版 bilibili-api-python 支持，16.x 跳过）
+        if select_client is not None:
+            try:
+                select_client("curl_cffi")
+            except Exception:
+                pass
         
         # ✅ 关键改进：创建单一的User对象，复用会话（带凭证时绕过风控）
         u = user.User(uid=int(mid), credential=_credential)
@@ -807,9 +813,12 @@ async def main_collection_flow_v2(
     
     try:
         # 导入必要的模块
-        global user, video, select_client
+        global user, video, select_client, _credential
         from bilibili_api import user, video
-        from bilibili_api.utils.network import select_client
+        try:
+            from bilibili_api.utils.network import select_client
+        except ImportError:
+            select_client = None
 
         # 注入 B站账号凭证（有凭证时绕过风控；无凭证时匿名采集）
         if BILIBILI_SESSDATA and BILIBILI_BILI_JCT:
