@@ -301,7 +301,7 @@ auto_activate_venv() {
         source ./venv/bin/activate
     }
 }
-chpwd_functions=( auto_activate_venv $chwd_functions )
+chpwd_functions=( auto_activate_venv $chpwd_functions )
 
 # 保存退出
 source ~/.zshrc
@@ -344,7 +344,7 @@ python3 collect_py39.py  # 注意：可能仍有兼容性问题
 
 1. **检查日志**：`logs/collect.log`
 2. **查看错误信息**：完整复制错误堆栈
-3. **参考文档**：[COLLECT_V2_GUIDE.md](./COLLECT_V2_GUIDE.md)
+3. **参考文档**：[数据采集指南](./数据采集指南.md)
 4. **GitHub Issues**：[bilibili-api Issues](https://github.com/Nemo2011/bilibili-api/issues)
 
 ---
@@ -355,7 +355,7 @@ python3 collect_py39.py  # 注意：可能仍有兼容性问题
 
 1. ✅ **立即测试** - 运行 `python collect.py`
 2. ✅ **查看结果** - 检查数据库和日志
-3. ✅ **设置定时任务** - 可选，参考 [COLLECT_V2_GUIDE.md](./COLLECT_V2_GUIDE.md)
+3. ✅ **设置定时任务** - 可选，参考 [数据采集指南](./数据采集指南.md)
 4. ✅ **监控运行状态** - 定期查看 `run_logs` 表
 
 ---
