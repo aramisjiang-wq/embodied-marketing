@@ -165,7 +165,8 @@ export async function createSession(
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, JSON.stringify(session), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // Only set secure flag when actually served over HTTPS
+    secure: (process.env.NEXT_PUBLIC_BASE_URL || "").startsWith("https://"),
     sameSite: "lax",
     maxAge: SESSION_MAX_AGE,
     path: "/",
