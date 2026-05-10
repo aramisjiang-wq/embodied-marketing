@@ -49,6 +49,7 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
   // UI状态
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // 数据获取
   useEffect(() => {
@@ -105,6 +106,30 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
     };
   }, [brandId, initialBrand]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchSession() {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (!cancelled) {
+          setIsAdmin(data?.data?.user?.role === "admin");
+        }
+      } catch {
+        // Keep delete actions hidden when session lookup fails.
+      }
+    }
+
+    fetchSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 数据准备（带空值保护）- 必须在所有 Hooks 在早期返回之前调用
   const videos = useMemo(() => brand?.videos || [], [brand?.videos]);
   const monthlyStats = useMemo(() => brand?.monthly_stats || [], [brand?.monthly_stats]);
@@ -157,11 +182,14 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
   }
 
   const handleDeleteClick = () => {
+    if (!isAdmin) return;
     setShowDeleteModal(true);
     setShowMoreMenu(false);
   };
 
   const handleConfirmDelete = async () => {
+    if (!isAdmin) return;
+
     try {
       const res = await fetch(`/api/brands/${brand.id}`, { method: "DELETE" });
       if (res.ok) {
@@ -245,33 +273,34 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
               ← 返回
             </Button>
 
-            {/* 更多菜单（包含删除） */}
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
+            {isAdmin && (
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
 
-              {/* 下拉菜单 */}
-              {showMoreMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)}></div>
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                    <button
-                      onClick={handleDeleteClick}
-                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      删除此品牌
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                {/* 下拉菜单 */}
+                {showMoreMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)}></div>
+                    <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                      <button
+                        onClick={handleDeleteClick}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        删除此品牌
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Card>
