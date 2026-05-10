@@ -11,7 +11,7 @@
 
 | 版本 | 日期 | 类型 | 核心变更 | 状态 |
 |------|------|------|---------|------|
-| **v2.32.0-production-stabilization** | **2026-05-10** | **🚀 首次生产上线稳定化+飞书登录+采集链路修复** | **①完成本地/GitHub/服务器代码一致性校准并部署到101.200.222.139:8082 ②修复飞书OAuth2登录链路（直接授权跳转、v2 token响应解析、0.0.0.0回调、HTTP Cookie secure策略）③修复/api/trends 500（brands.is_self字段与旧库迁移）④迁移本地历史SQLite数据到服务器 ⑤配置Bilibili Cookie并修复cron加载.env.local ⑥权限调整为普通用户可添加品牌、仅管理员可删除品牌 ⑦首页新增管理员「立即采集」按钮和实时采集过程展示 ⑧修复采集脚本兼容bilibili-api-python 16.3.0（get_videos备用接口、Credential注入、状态文件和数据库写入）⑨修复collect-history数据库路径和手动采集Python路径 ⑩将Python venv移出项目根目录，解决Turbopack构建panic ⑪修复/admin用户列表空白的session自修复入库 ⑫新增运维记录文档并整理长期采集维护方案** | **✅ 完成** |
+| **v2.32.0-production-stabilization** | **2026-05-10** | **🚀 首次生产上线稳定化+飞书登录+采集链路修复** | **①完成本地/GitHub/服务器代码一致性校准并部署到101.200.222.139:8082 ②修复飞书OAuth2登录链路（直接授权跳转、v2 token响应解析、0.0.0.0回调、HTTP Cookie secure策略）③修复/api/trends 500（brands.is_self字段与旧库迁移）④迁移本地历史SQLite数据到服务器 ⑤配置Bilibili Cookie并修复cron加载.env.local ⑥权限调整为普通用户可添加品牌、仅管理员可删除品牌 ⑦首页新增管理员「立即采集」按钮和实时采集过程展示 ⑧修复采集脚本兼容bilibili-api-python 16.3.0（get_videos备用接口、Credential注入、状态文件和数据库写入）⑨修复collect-history数据库路径和手动采集Python路径 ⑩将Python venv移出项目根目录，解决Turbopack构建panic ⑪修复/admin用户列表空白的session自修复入库 ⑫新增运维记录文档并整理长期采集维护方案 ⑬完成三端代码收口（本地/GitHub/服务器运行代码一致，服务器env/数据库保持独立）** | **✅ 完成** |
 | **v2.31.1-security** | **2026-05-09** | **🛡️ API安全修复+生产级部署系统** | **①🔴 修复品牌CRUD API权限漏洞（viewer角色可创建/编辑/删除品牌）②新增通用权限验证函数（requireRole/requireAdmin/requireEditor）③完善采集API权限控制（仅editor+可触发）④创建生产级部署脚本（自动备份+增量合并+健康检查+回滚支持）⑤数据库安全迁移策略（INSERT OR IGNORE保留双方数据）⑥更新SPEC/PRD文档至v2.31.1⑦完善部署指南和操作手册** | **✅ 完成** |
 | **v2.31.0** | **2026-05-09** | **🔐 飞书扫码登录+企业级用户管理体系** | **①新增飞书OAuth2扫码登录（专业登录页+二维码SDK集成）②实现完整用户管理系统（users/login_logs/action_logs三张表）③三级角色权限体系（admin/editor/viewer）④管理员后台页面（/admin，用户CRUD+统计面板+日志查看）⑤路由中间件保护（未登录自动跳转/login）⑥Session持久化（HttpOnly Cookie+7天过期）⑦登录审计日志（IP/User-Agent/时间戳）⑧用户状态管理（启用/禁用账号）⑨第一个注册用户自动成为admin⑩侧边栏动态显示"系统管理"入口（仅admin可见）** | **✅ 完成** |
 | **v2.30.0** | **2026-05-09** | **🔧 对比页面UX重构+数据隔离+Bug修复** | **①修复对比页面React Hooks违规导致11条控制台错误（useState/useEffect在条件返回后调用）②对比页面状态完全独立（compareBrands本地状态），不再与主页共享selectedBrands③优化选择流程：添加"开始对比"按钮，用户主动确认后才显示结果④修复月度数据缺少当前月份bug（getComparisonData日期计算错误，2025-05~2026-04→2025-06~2026-05）⑤对比厂家上限严格限制为5个（之前可显示13个）⑥支持2-5个灵活选择，不再选够2个就自动跳转⑦重新选择功能优化：保留已选状态而非清空** | **✅ 完成** |
@@ -124,6 +124,34 @@ embodied-marketing
 - ✅ 修正代码同步路径，避免「改了子目录但线上不生效」；
 - ✅ 重新构建并通过 PM2 重启线上服务；
 - ✅ 修正 `.env.local` 的真实读取位置为 `/opt/embodied-marketing/.env.local`。
+
+#### 2. 三端代码收口
+
+**收口时间**：2026-05-10 21:20 左右
+
+本次对本地、GitHub、服务器三端做了代码一致性收口：
+
+- ✅ 确认服务器采集任务已完成，避免同步代码时影响正在运行的采集进程；
+- ✅ 仅同步代码和脚本到服务器运行目录，不覆盖服务器 `.env.local`、SQLite 数据库、venv、`.next`、`node_modules`、日志和 PM2/cron 运行配置；
+- ✅ 同步范围限定为 `src/` 关键运行代码与 `scripts/` 采集脚本；
+- ✅ 同步后对 10 个关键代码/脚本文件做 SHA-256 哈希校验，确认本地与服务器一致；
+- ✅ 服务器执行 `npm run build` 通过，并通过 PM2 重启 `embodied-marketing`；
+- ✅ 本地提交并推送 GitHub，最新提交为 `1e92585 fix: stabilize production collection and permissions`；
+- ✅ 收口后代码层状态为：`本地代码 = GitHub main = 服务器运行代码`。
+
+**明确不纳入 GitHub 的服务器运行资产**：
+
+```text
+/opt/embodied-marketing/.env.local
+/opt/embodied-marketing/bilibili_monitor.db
+/opt/embodied-marketing/bilibili_monitor.db-wal
+/opt/embodied-marketing/bilibili_monitor.db-shm
+/opt/embodied-marketing-venv
+/opt/embodied-marketing/.next
+/opt/embodied-marketing/node_modules
+/opt/embodied-marketing/scripts/logs
+PM2 / crontab 运行配置
+```
 
 ---
 
@@ -396,11 +424,14 @@ bilibili-monitor/docs/运维记录_EmbodiedMarketing_20260510.md
 - ✅ 删除品牌仅管理员可见/可执行；
 - ✅ 首页管理员可触发「立即采集」；
 - ✅ `collect.py` 可写 `collect_status.json`；
-- ✅ `brand_stats` 已写入 2026-05-10 今日粉丝数据；
-- ✅ 视频总数从 `527` 增至 `595`；
-- ✅ 视频统计记录从 `527` 增至 `546` 并持续采集中；
+- ✅ `brand_stats` 已写入 2026-05-10 今日 13 个品牌粉丝数据；
+- ✅ 本次采集任务 13/13 成功，采集视频数 `885`；
+- ✅ 数据库当前 `videos=982`、`video_stats=982`；
+- ✅ `run_logs` 已记录最新采集任务；
 - ✅ Next.js 构建通过；
-- ✅ PM2 服务重启成功。
+- ✅ PM2 服务重启成功并保持 `online`；
+- ✅ 本地 `HEAD` 与 GitHub `origin/main` 均为 `1e92585`；
+- ✅ 服务器关键运行代码与本地最终版本哈希一致。
 
 ---
 

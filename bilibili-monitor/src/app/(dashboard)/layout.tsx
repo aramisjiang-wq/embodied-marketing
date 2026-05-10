@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   BarChart3,
   Settings,
-  X,
   LogOut,
   User,
   Shield,
@@ -95,6 +94,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleAddBrand = async (mid: string, name: string) => {
+    const response = await fetch("/api/brands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mid, name }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "添加失败");
+    }
+    await loadOverview();
+  };
+
   useEffect(() => {
     loadOverview();
     loadCurrentUser();
@@ -104,7 +116,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         abortControllerRef.current.abort();
       }
     };
-  }, [loadOverview]);
+  }, [loadOverview, loadCurrentUser]);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -138,9 +150,11 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           >
             <Menu className="w-5 h-5 text-gray-600" />
           </button>
-          <img
+          <Image
             src="/logo.png"
             alt="LimX Dynamics"
+            width={120}
+            height={28}
             className="h-7 w-auto object-contain"
           />
           <span
@@ -278,7 +292,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             })}
 
             {/* Admin Panel - Only for admin users */}
-            {currentUser && (currentUser as any).role === "admin" && (() => {
+            {currentUser?.role === "admin" && (() => {
               const isAdminActive = pathname === "/admin";
               return (
                 <button
@@ -336,7 +350,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <AddBrandModal
           isOpen={showAddBrandModal}
           onClose={() => setShowAddBrandModal(false)}
-          onAdd={loadOverview}
+          onAdd={handleAddBrand}
         />
       )}
     </div>

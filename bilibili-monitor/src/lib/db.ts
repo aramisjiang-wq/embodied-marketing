@@ -355,7 +355,6 @@ export function getMonthlyStats(brandId?: number): MonthlyStat[] {
 export function getBrandMonthlyStats(brandId: number): MonthlyStat[] {
   const database = getDb();
 
-  // 获取该品牌的所有月份数据（只返回有视频的月份）
   const rawData = database.prepare(`
     SELECT
       strftime('%Y-%m', v.pub_date) as month,
@@ -370,42 +369,22 @@ export function getBrandMonthlyStats(brandId: number): MonthlyStat[] {
     ORDER BY month ASC
   `).all([brandId]) as { month: string; video_count: number; total_views: number; total_likes?: number; total_favorites?: number }[];
 
-  if (rawData.length === 0) {
-    return [];
-  }
-
-  // 生成完整的月份序列（补全缺失的月份）
-  const months: MonthlyStat[] = [];
-  let currentDate = new Date(rawData[0].month + "-01");
-  const endDate = new Date(rawData[rawData.length - 1].month + "-01");
-
-  // 如果数据跨度小于12个月，扩展到最近12个月
   const now = new Date();
-  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  if (currentDate > twelveMonthsAgo) {
-    currentDate = twelveMonthsAgo;
-  }
+  const monthlyByMonth = new Map(rawData.map((item) => [item.month, item]));
 
-  while (currentDate <= endDate || months.length < 12) {
-    const monthStr = currentDate.toISOString().slice(0, 7); // "2026-05"
-    const existingData = rawData.find((d) => d.month === monthStr);
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const existingData = monthlyByMonth.get(month);
 
-    months.push({
-      month: monthStr,
+    return {
+      month,
       video_count: existingData?.video_count || 0,
       total_views: existingData?.total_views || 0,
       total_likes: existingData?.total_likes || 0,
       total_favorites: existingData?.total_favorites || 0,
-    });
-
-    // 移动到下一个月
-    currentDate.setMonth(currentDate.getMonth() + 1);
-
-    // 防止无限循环（最多生成24个月）
-    if (months.length >= 24) break;
-  }
-
-  return months;
+    };
+  });
 }
 
 export function getComparisonData(brandIds: number[], months: number = 12): BrandPeriodStat[] {

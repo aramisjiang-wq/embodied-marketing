@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBrandsWithStats, createBrand } from "@/lib/db";
+import { getBrandsWithStats, createBrand, getBrandByMid } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function GET() {
@@ -24,12 +24,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { mid, name } = body;
+    const mid = String(body.mid || "").trim();
+    const name = String(body.name || "").trim();
 
     if (!mid || !name) {
       return NextResponse.json(
         { success: false, error: "MID and name are required" },
         { status: 400 }
+      );
+    }
+
+    const existingBrand = getBrandByMid(mid);
+    if (existingBrand) {
+      return NextResponse.json(
+        { success: false, error: `厂家已存在：${existingBrand.name}` },
+        { status: 409 }
       );
     }
 

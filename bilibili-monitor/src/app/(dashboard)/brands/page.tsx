@@ -68,7 +68,11 @@ export default function BrandsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mid, name }),
     });
-    if (!response.ok) throw new Error("添加失败");
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "添加失败");
+    }
+
     const res = await fetch("/api/brands");
     const data = await res.json();
     if (data.success) {

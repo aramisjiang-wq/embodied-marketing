@@ -49,8 +49,6 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
   // UI状态
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [sortBy, setSortBy] = useState<"month" | "video_count" | "total_views">("month");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // 数据获取
   useEffect(() => {
@@ -111,80 +109,15 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
   const videos = useMemo(() => brand?.videos || [], [brand?.videos]);
   const monthlyStats = useMemo(() => brand?.monthly_stats || [], [brand?.monthly_stats]);
 
-  // 生成完整12个月时间轴（从当前月份往前推12个月，补全缺失月份）
+  // 生成完整12个月时间轴（按月份升序，供趋势图使用）
   const chartData = useMemo(() => {
-    const now = new Date();
-    const months: { month: string; video_count: number }[] = [];
-
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const found = monthlyStats.find(s => s.month === monthStr);
-      months.push({
-        month: monthStr,
-        video_count: found ? found.video_count : 0,
-      });
-    }
-
-    return months;
+    return [...monthlyStats].sort((a, b) => a.month.localeCompare(b.month));
   }, [monthlyStats]);
 
-  // 生成完整的月度数据列表（用于表格展示，包含当前月份）
+  // 生成完整的月度数据列表（用于表格展示，最新月份在前）
   const tableMonthlyData = useMemo(() => {
-    if (monthlyStats.length === 0) return [];
-
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // 检查是否已有当前月份数据
-    const hasCurrentMonth = monthlyStats.some(s => s.month === currentMonth);
-
-    const data = [...monthlyStats];
-
-    // 如果没有当前月份，添加一条记录（video_count=0）
-    if (!hasCurrentMonth) {
-      data.push({ month: currentMonth, video_count: 0, total_views: 0, total_likes: 0, total_favorites: 0 });
-    }
-
-    // 按月份降序排列（最新的在前）
-    return data.sort((a, b) => b.month.localeCompare(a.month));
-  }, [monthlyStats]);
-
-  // 排序后的月度数据（使用安全的 switch 语句）
-  const sortedMonthlyStats = useMemo(() => {
-    return [...monthlyStats].sort((a, b) => {
-      let aVal: number | string;
-      let bVal: number | string;
-
-      switch (sortBy) {
-        case "month":
-          aVal = a.month || "";
-          bVal = b.month || "";
-          break;
-        case "video_count":
-          aVal = a.video_count || 0;
-          bVal = b.video_count || 0;
-          break;
-        case "total_views":
-          aVal = a.total_views || 0;
-          bVal = b.total_views || 0;
-          break;
-        default:
-          aVal = a.month || "";
-          bVal = b.month || "";
-      }
-
-      if (typeof aVal === "string") {
-        return sortOrder === "asc"
-          ? String(aVal).localeCompare(String(bVal))
-          : String(bVal).localeCompare(String(aVal));
-      }
-
-      return sortOrder === "asc"
-        ? Number(aVal) - Number(bVal)
-        : Number(bVal) - Number(aVal);
-    });
-  }, [monthlyStats, sortBy, sortOrder]);
+    return [...chartData].sort((a, b) => b.month.localeCompare(a.month));
+  }, [chartData]);
 
   // 最新月份标识（使用表格数据，确保包含当前月份）
   const latestMonth = tableMonthlyData.length > 0 ? tableMonthlyData[0].month : null;
@@ -222,15 +155,6 @@ export default function BrandDetailPage({ brand: initialBrand }: BrandDetailPage
       </div>
     );
   }
-
-  const handleToggleSort = (field: "month" | "video_count" | "total_views") => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(field);
-      setSortOrder("desc");
-    }
-  };
 
   const handleDeleteClick = () => {
     setShowDeleteModal(true);

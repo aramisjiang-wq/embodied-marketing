@@ -156,17 +156,31 @@ export default function DashboardPage() {
     setShowAddBrandModal(true);
   };
 
-  const handleBrandAdded = async () => {
-    fetch("/api/overview")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          const brandList = data.data.brands || [];
-          setBrands(brandList);
-          setBrandsState(brandList as BrandData[]);
-        }
-      })
-      .catch(() => {});
+  const refreshOverview = async () => {
+    try {
+      const res = await fetch("/api/overview");
+      const data = await res.json();
+      if (data.success) {
+        const brandList = data.data.brands || [];
+        setBrands(brandList);
+        setBrandsState(brandList as BrandData[]);
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const handleBrandAdded = async (mid: string, name: string) => {
+    const response = await fetch("/api/brands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mid, name }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "添加失败");
+    }
+    await refreshOverview();
   };
 
   if (loading) {
