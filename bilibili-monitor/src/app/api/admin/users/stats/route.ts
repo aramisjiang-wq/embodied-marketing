@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserStats, getRecentLoginLogs, getActionLogs } from "@/lib/user-db";
+import { findOrCreateUser, getUserStats, getRecentLoginLogs, getActionLogs } from "@/lib/user-db";
 
 async function checkAdminAuth(request: NextRequest) {
   const sessionCookie = request.cookies.get("feishu_session");
@@ -34,6 +34,10 @@ export async function GET(request: NextRequest) {
         { success: false, error: auth.error },
         { status: auth.error === "Not authenticated" ? 401 : 403 }
       );
+    }
+
+    if (auth.session?.user?.open_id) {
+      findOrCreateUser(auth.session.user);
     }
 
     const stats = getUserStats();

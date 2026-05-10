@@ -3,7 +3,7 @@
 > **项目名称**：B站竞品监控 (Bilibili Competitor Monitor)
 > **技术栈**：Next.js 16 + TypeScript + SQLite + Recharts + Tailwind CSS
 > **创建时间**：2026-05-06
-> **当前版本**：v2.31.1-security
+> **当前版本**：v2.32.0-production-stabilization
 
 ---
 
@@ -11,6 +11,7 @@
 
 | 版本 | 日期 | 类型 | 核心变更 | 状态 |
 |------|------|------|---------|------|
+| **v2.32.0-production-stabilization** | **2026-05-10** | **🚀 首次生产上线稳定化+飞书登录+采集链路修复** | **①完成本地/GitHub/服务器代码一致性校准并部署到101.200.222.139:8082 ②修复飞书OAuth2登录链路（直接授权跳转、v2 token响应解析、0.0.0.0回调、HTTP Cookie secure策略）③修复/api/trends 500（brands.is_self字段与旧库迁移）④迁移本地历史SQLite数据到服务器 ⑤配置Bilibili Cookie并修复cron加载.env.local ⑥权限调整为普通用户可添加品牌、仅管理员可删除品牌 ⑦首页新增管理员「立即采集」按钮和实时采集过程展示 ⑧修复采集脚本兼容bilibili-api-python 16.3.0（get_videos备用接口、Credential注入、状态文件和数据库写入）⑨修复collect-history数据库路径和手动采集Python路径 ⑩将Python venv移出项目根目录，解决Turbopack构建panic ⑪修复/admin用户列表空白的session自修复入库 ⑫新增运维记录文档并整理长期采集维护方案** | **✅ 完成** |
 | **v2.31.1-security** | **2026-05-09** | **🛡️ API安全修复+生产级部署系统** | **①🔴 修复品牌CRUD API权限漏洞（viewer角色可创建/编辑/删除品牌）②新增通用权限验证函数（requireRole/requireAdmin/requireEditor）③完善采集API权限控制（仅editor+可触发）④创建生产级部署脚本（自动备份+增量合并+健康检查+回滚支持）⑤数据库安全迁移策略（INSERT OR IGNORE保留双方数据）⑥更新SPEC/PRD文档至v2.31.1⑦完善部署指南和操作手册** | **✅ 完成** |
 | **v2.31.0** | **2026-05-09** | **🔐 飞书扫码登录+企业级用户管理体系** | **①新增飞书OAuth2扫码登录（专业登录页+二维码SDK集成）②实现完整用户管理系统（users/login_logs/action_logs三张表）③三级角色权限体系（admin/editor/viewer）④管理员后台页面（/admin，用户CRUD+统计面板+日志查看）⑤路由中间件保护（未登录自动跳转/login）⑥Session持久化（HttpOnly Cookie+7天过期）⑦登录审计日志（IP/User-Agent/时间戳）⑧用户状态管理（启用/禁用账号）⑨第一个注册用户自动成为admin⑩侧边栏动态显示"系统管理"入口（仅admin可见）** | **✅ 完成** |
 | **v2.30.0** | **2026-05-09** | **🔧 对比页面UX重构+数据隔离+Bug修复** | **①修复对比页面React Hooks违规导致11条控制台错误（useState/useEffect在条件返回后调用）②对比页面状态完全独立（compareBrands本地状态），不再与主页共享selectedBrands③优化选择流程：添加"开始对比"按钮，用户主动确认后才显示结果④修复月度数据缺少当前月份bug（getComparisonData日期计算错误，2025-05~2026-04→2025-06~2026-05）⑤对比厂家上限严格限制为5个（之前可显示13个）⑥支持2-5个灵活选择，不再选够2个就自动跳转⑦重新选择功能优化：保留已选状态而非清空** | **✅ 完成** |
@@ -72,7 +73,348 @@
 | **v1.0.0** | **2026-05-06** | **🎉 初始版本** | **基础架构搭建、数据库设计、数据采集脚本** | **✅ 完成** |
 
 ---
-## 🛡️ v2.31.1-security (当前版本)
+## 🚀 v2.32.0-production-stabilization (当前版本)
+
+**发布日期**：2026-05-10
+**版本类型**：🚀 **首次生产上线稳定化 + 登录认证修复 + 数据采集链路修复**
+**状态**：✅ **已完成并线上验证**
+**影响范围**：生产部署、飞书登录、用户权限、数据采集、SQLite迁移、服务器运维、前端采集状态展示
+**严重级别**：🔴 **高（首次上线阻塞问题与采集链路修复）**
+
+---
+
+### 📌 **版本概述**
+
+本版本围绕 Embodied Marketing 首次生产上线后的关键稳定性问题进行集中修复，目标是确保：
+
+- 本地代码、GitHub 仓库和服务器运行代码一致；
+- 飞书扫码登录可稳定进入系统；
+- 历史数据和新采集数据都能在服务器正常展示；
+- 普通用户和管理员权限边界清晰；
+- 手动采集、自动采集、采集过程展示和采集历史形成闭环；
+- 后续运维有明确文档、路径和排障依据。
+
+---
+
+### ✅ **一、生产部署与代码一致性**
+
+#### 1. 统一运行环境
+
+**服务器地址**：
+
+```text
+http://101.200.222.139:8082
+```
+
+**真实运行目录**：
+
+```text
+/opt/embodied-marketing
+```
+
+**PM2 服务名**：
+
+```text
+embodied-marketing
+```
+
+**关键修复**：
+
+- ✅ 明确线上 Next.js 实际运行在 `/opt/embodied-marketing`，而不是子目录 `bilibili-monitor/`；
+- ✅ 修正代码同步路径，避免「改了子目录但线上不生效」；
+- ✅ 重新构建并通过 PM2 重启线上服务；
+- ✅ 修正 `.env.local` 的真实读取位置为 `/opt/embodied-marketing/.env.local`。
+
+---
+
+### ✅ **二、飞书 OAuth2 登录链路修复**
+
+#### 1. 登录页改造
+
+将旧的二维码 SDK 容器模式调整为直接飞书授权跳转，解决：
+
+```text
+[Feishu Login] QR container not found
+Failed to fetch
+```
+
+#### 2. Token 响应解析修复
+
+飞书 OAuth2 v2 token 接口返回 `access_token` 在顶层，而旧代码按 `data.access_token` 解析，导致：
+
+```text
+Cannot read properties of undefined (reading 'access_token')
+```
+
+已修复为兼容：
+
+- v2 直接响应格式；
+- 旧版 wrapped data 格式。
+
+#### 3. 回调地址修复
+
+修复回调跳转中出现 `0.0.0.0:8082` 的问题：
+
+```text
+Unsafe attempt to load URL http://0.0.0.0:8082/
+```
+
+统一使用 `NEXT_PUBLIC_BASE_URL` 生成浏览器跳转地址。
+
+#### 4. Session Cookie 修复
+
+生产环境使用 HTTP 访问时，原逻辑强制设置 `secure: true`，导致 Cookie 被浏览器丢弃、登录后又回登录页。
+
+已改为：
+
+- `NEXT_PUBLIC_BASE_URL` 是 HTTPS 时才设置 `secure: true`；
+- 当前 HTTP 服务器可正常保存 session。
+
+---
+
+### ✅ **三、数据展示与 SQLite 迁移修复**
+
+#### 1. `/api/trends` 500 修复
+
+线上报错：
+
+```text
+SqliteError: no such column: b.is_self
+```
+
+修复内容：
+
+- ✅ `brands` 表新增 `is_self INTEGER DEFAULT 0`；
+- ✅ 初始化 schema 时自动检查旧库字段；
+- ✅ 旧数据库缺字段时自动执行 `ALTER TABLE brands ADD COLUMN is_self INTEGER DEFAULT 0`。
+
+#### 2. 历史数据迁移
+
+已将本地历史 SQLite 数据迁移到服务器。
+
+线上数据库路径：
+
+```text
+/opt/embodied-marketing/bilibili_monitor.db
+```
+
+---
+
+### ✅ **四、权限体系调整**
+
+本版本根据实际产品使用方式重新收敛权限：
+
+| 操作 | 新权限 |
+|------|--------|
+| 查看系统 | 登录用户 |
+| 添加品牌 | 普通登录用户 |
+| 删除品牌 | 仅管理员 |
+| 手动触发采集 | 管理员 |
+| 用户管理 `/admin` | 管理员 |
+
+具体修复：
+
+- ✅ `POST /api/brands` 改为所有登录用户可添加品牌；
+- ✅ `DELETE /api/brands/[id]` 改为仅 `admin` 可删除；
+- ✅ 品牌管理页删除按钮仅管理员可见；
+- ✅ `/admin` 用户接口增加 session 自修复入库，解决「能进入后台但用户列表为空」的问题。
+
+---
+
+### ✅ **五、Bilibili Cookie 与长期采集配置**
+
+#### 1. Cookie 配置
+
+已配置以下环境变量到线上真实 `.env.local`：
+
+```text
+BILIBILI_SESSDATA=***
+BILIBILI_BILI_JCT=***
+BILIBILI_BUVID3=***
+```
+
+说明：
+
+- Cookie 不永久有效；
+- 当前 `SESSDATA` 解析过期时间为 `2026-11-06 00:30:06`；
+- 退出登录、改密码、账号风控都可能导致提前失效。
+
+#### 2. 自动采集 cron 修复
+
+当前 cron：
+
+```text
+30 0 * * * /opt/embodied-marketing/scripts/daily_collect.sh
+```
+
+已修复：
+
+- ✅ 加载 `/opt/embodied-marketing/.env.local`；
+- ✅ 使用 `/opt/embodied-marketing-venv`；
+- ✅ 执行 `scripts/collect.py`；
+- ✅ 日志输出到 `/opt/embodied-marketing/scripts/logs/`。
+
+---
+
+### ✅ **六、采集脚本与前端状态展示修复**
+
+#### 1. 根因
+
+之前手动启动的是 `collect_v2.py`，它能打印日志、获取用户信息和粉丝数，但存在关键问题：
+
+- 不写前端需要的 `scripts/collect_status.json`；
+- 不完整写入 `videos` / `video_stats`；
+- 因此页面看不到采集过程，也看不到最新采集结果。
+
+#### 2. 修复方案
+
+改回使用 `collect.py` 作为生产采集主脚本，并完成兼容修复：
+
+- ✅ 兼容服务器当前 `bilibili-api-python 16.3.0`；
+- ✅ `select_client/request_settings` 不存在时自动降级；
+- ✅ 注入 Bilibili `Credential`；
+- ✅ 修复备用视频接口：`get_video` → `get_videos()`；
+- ✅ 保留状态文件写入能力；
+- ✅ 保留 `videos` / `video_stats` / `brand_stats` / `run_logs` 数据库写入能力。
+
+#### 3. 手动采集 API 修复
+
+修复 `src/lib/collector.ts`：
+
+- ✅ 本地默认使用 `python3`；
+- ✅ 服务器优先使用 `/opt/embodied-marketing-venv/bin/python3`；
+- ✅ 解决原先写死 `/opt/homebrew/bin/python3.11` 导致线上不可用的问题。
+
+#### 4. 采集历史修复
+
+修复 `collect-history` 数据库路径：
+
+```text
+process.cwd()/bilibili_monitor.db
+```
+
+避免错误读取上级目录导致历史记录为空。
+
+#### 5. 首页采集过程增强
+
+首页「数据采集」卡片新增：
+
+- 当前品牌；
+- 当前步骤；
+- 当前品牌内部进度；
+- 管理员「立即采集」按钮。
+
+线上验证时已看到：
+
+```text
+宇树科技
+当前品牌进度：42/90
+当前步骤：获取视频详情
+```
+
+---
+
+### ✅ **七、Turbopack 构建问题修复**
+
+构建时报错：
+
+```text
+Symlink [project]/venv/bin/python is invalid, it points out of the filesystem root
+```
+
+原因：
+
+- Python 虚拟环境 `venv` 放在 Next.js 项目根目录；
+- Turbopack 扫描项目时追踪到 `venv/bin/python` 外部软链并 panic。
+
+修复：
+
+- ✅ 将虚拟环境移到 `/opt/embodied-marketing-venv`；
+- ✅ 更新 `.env.local` 的 `PYTHON_PATH`；
+- ✅ 更新 cron 脚本使用新 venv；
+- ✅ 重新构建通过。
+
+---
+
+### ✅ **八、文档与运维记录**
+
+新增运维记录文档：
+
+```text
+bilibili-monitor/docs/运维记录_EmbodiedMarketing_20260510.md
+```
+
+内容覆盖：
+
+- 部署路径；
+- 飞书登录修复；
+- 权限调整；
+- Bilibili Cookie；
+- 自动/手动采集；
+- 412 风控说明；
+- 长期维护建议。
+
+---
+
+### ⚠️ **已知限制**
+
+#### 1. B站动态接口仍可能 412
+
+动态接口：
+
+```text
+/x/polymer/web-dynamic/v1/feed/space
+```
+
+仍可能返回：
+
+```text
+412 Precondition Failed
+```
+
+当前策略：
+
+- 动态接口失败时切换备用视频列表接口 `get_videos()`；
+- 视频列表接口可获取公开视频列表；
+- 后续如需更高稳定性，应接入代理池或浏览器指纹方案。
+
+#### 2. Cookie 需要周期维护
+
+建议每 3-5 个月主动更新一次 Bilibili Cookie，并增加失败告警。
+
+---
+
+### 🧪 **验证记录**
+
+已完成验证：
+
+- ✅ 飞书扫码登录成功；
+- ✅ 登录 Cookie 在 HTTP 环境可保存；
+- ✅ 首页数据可展示；
+- ✅ `/api/trends` 不再因 `is_self` 报 500；
+- ✅ 普通用户可添加品牌；
+- ✅ 删除品牌仅管理员可见/可执行；
+- ✅ 首页管理员可触发「立即采集」；
+- ✅ `collect.py` 可写 `collect_status.json`；
+- ✅ `brand_stats` 已写入 2026-05-10 今日粉丝数据；
+- ✅ 视频总数从 `527` 增至 `595`；
+- ✅ 视频统计记录从 `527` 增至 `546` 并持续采集中；
+- ✅ Next.js 构建通过；
+- ✅ PM2 服务重启成功。
+
+---
+
+### 📌 **后续建议**
+
+1. 增加采集失败飞书/邮件告警。
+2. 在后台显示 Cookie 到期时间和采集健康状态。
+3. 将服务器部署目录进一步规范化，避免根目录和子目录混用。
+4. 若 B站 412 持续影响动态接口，接入代理池或 `curl_cffi` 浏览器指纹方案。
+5. 为采集脚本补充小型集成测试，避免 API 方法名变化再次影响上线。
+
+---
+
+## 🛡️ v2.31.1-security
 
 **发布日期**：2026-05-09
 **版本类型**：🛡️ **API安全修复 + 生产级部署系统**

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
+  findOrCreateUser,
   getAllUsers,
   getUserById,
   updateUserRole,
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
         { success: false, error: auth.error },
         { status: auth.error === "Not authenticated" ? 401 : 403 }
       );
+    }
+
+    if (auth.session?.user?.open_id) {
+      findOrCreateUser(auth.session.user);
     }
 
     const users = getAllUsers();

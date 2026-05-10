@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Database from "better-sqlite3";
 import path from "path";
 
-const DB_PATH = path.join(process.cwd(), "..", "bilibili_monitor.db");
+const DB_PATH = path.join(process.cwd(), "bilibili_monitor.db");
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

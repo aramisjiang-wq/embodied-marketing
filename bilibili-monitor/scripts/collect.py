@@ -9,11 +9,35 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'bilibili-api'))
-from bilibili_api import user, video, select_client, request_settings
+from bilibili_api import user, video
+
+try:
+    from bilibili_api import Credential
+except ImportError:
+    Credential = None
+
+try:
+    from bilibili_api import select_client, request_settings
+except ImportError:
+    select_client = None
+    request_settings = None
+    try:
+        from bilibili_api import settings as bili_settings
+    except ImportError:
+        bili_settings = None
 
 # 配置浏览器指纹伪装（关键！）
-select_client("curl_cffi")
-request_settings.set("impersonate", "chrome131")
+if select_client and request_settings:
+    try:
+        select_client("curl_cffi")
+        request_settings.set("impersonate", "chrome131")
+    except Exception:
+        pass
+elif "bili_settings" in globals() and bili_settings:
+    try:
+        bili_settings.http_client = bili_settings.HTTPClient.HTTPX
+    except Exception:
+        pass
 
 # 配置日志系统
 logging.basicConfig(
@@ -40,9 +64,45 @@ CONFIG = {
     "random_delay_range": 3.0,   # 随机延迟范围（秒）
     "max_retries": 3,            # 最大重试次数
     "page_delay": 1.5,           # 分页请求延迟（秒）
+    "request_delay": 1.5,        # 普通分页请求延迟（秒）
     "video_detail_delay": 1.0,   # 视频详情请求延迟（秒）
     "brand_delay": 2.0,          # 品牌间延迟（秒）
 }
+
+BILIBILI_SESSDATA = os.environ.get("BILIBILI_SESSDATA", "")
+BILIBILI_BILI_JCT = os.environ.get("BILIBILI_BILI_JCT", "")
+BILIBILI_BUVID3 = os.environ.get("BILIBILI_BUVID3", "")
+
+_credential = (
+    Credential(
+        sessdata=BILIBILI_SESSDATA,
+        bili_jct=BILIBILI_BILI_JCT,
+        buvid3=BILIBILI_BUVID3 or None,
+    )
+    if Credential and BILIBILI_SESSDATA and BILIBILI_BILI_JCT
+    else None
+)
+
+
+def create_user(uid: str):
+    """创建兼容不同 bilibili-api-python 版本的 User 对象。"""
+    uid_int = int(uid)
+    if _credential is not None:
+        try:
+            return user.User(uid=uid_int, credential=_credential)
+        except TypeError:
+            pass
+    return user.User(uid=uid_int)
+
+
+def create_video(bvid: str):
+    """创建兼容不同 bilibili-api-python 版本的 Video 对象。"""
+    if _credential is not None:
+        try:
+            return video.Video(bvid=bvid, credential=_credential)
+        except TypeError:
+            pass
+    return video.Video(bvid=bvid)
 
 
 def get_connection():
@@ -92,7 +152,7 @@ async def get_user_info(uid: str) -> Optional[Dict]:
     """获取用户基本信息（容错增强版）"""
     try:
         async def _fetch():
-            u = user.User(uid=uid)
+            u = create_user(uid)
             result = await u.get_user_info()
 
             # 兼容多种返回类型
@@ -116,7 +176,7 @@ async def get_relation_info(uid: str) -> Optional[Dict]:
     """获取用户关系信息（粉丝/关注数）（容错增强版）"""
     try:
         async def _fetch():
-            u = user.User(uid=uid)
+            u = create_user(uid)
             result = await u.get_relation_info()
 
             # 兼容多种返回类型
@@ -145,7 +205,7 @@ async def fetch_all_dynamics(uid: str) -> List[Dict]:
     for page in range(max_pages):
         try:
             async def _fetch_page(off=""):
-                u = user.User(uid=uid)
+                u = create_user(uid)
                 if off:
                     return await u.get_dynamics_new(offset=off)
                 else:
@@ -193,12 +253,12 @@ async def fetch_videos_list(uid: str) -> List[Dict]:
     max_pages = 10  # 最多获取10页（约300个视频）
 
     try:
-        u = user.User(uid=uid)
+        u = create_user(uid)
 
         while page <= max_pages:
             try:
                 async def _fetch_video_page(p=1, size=30):
-                    result = await u.get_video(pid=p, ps=size)
+                    result = await u.get_videos(pn=p, ps=size)
                     return result
 
                 result = await safe_request(_fetch_video_page, page, ps)
@@ -261,7 +321,7 @@ async def fetch_videos_list(uid: str) -> List[Dict]:
 async def get_video_info(bvid: str) -> Optional[Dict]:
     """获取视频详细信息"""
     async def _fetch():
-        v = video.Video(bvid=bvid)
+        v = create_video(bvid)
         return await v.get_info()
     
     return await safe_request(_fetch)

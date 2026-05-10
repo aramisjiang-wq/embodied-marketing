@@ -35,8 +35,12 @@ export default function DashboardPage() {
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [collectStatus, setCollectStatus] = useState<{
     is_running: boolean;
+    current_brand: string | null;
+    current_brand_progress: string;
     completed_brands: number;
     total_brands: number;
+    current_step: string;
+    message: string;
     last_run_summary?: {
       total_videos: number;
       success_count: number;
@@ -243,7 +247,19 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-gray-900 tracking-tight">
                   {collectStatus.completed_brands}/{collectStatus.total_brands}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">品牌采集中...</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {collectStatus.current_brand || "品牌采集中..."}
+                </p>
+                <div className="mt-2 space-y-1">
+                  <p className="text-[11px] text-gray-500 truncate">
+                    {collectStatus.current_step || collectStatus.message || "正在采集"}
+                  </p>
+                  {collectStatus.current_brand_progress && collectStatus.current_brand_progress !== "0/0" && (
+                    <p className="text-[11px] text-orange-600">
+                      当前品牌进度：{collectStatus.current_brand_progress}
+                    </p>
+                  )}
+                </div>
               </>
             ) : collectStatus?.last_run_summary ? (
               <>

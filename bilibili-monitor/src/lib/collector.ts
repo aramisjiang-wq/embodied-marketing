@@ -1,7 +1,9 @@
 import { spawn } from "child_process";
+import { existsSync } from "fs";
 import path from "path";
 
-const PYTHON = "/opt/homebrew/bin/python3.11";
+const SERVER_PYTHON = "/opt/embodied-marketing-venv/bin/python3";
+const PYTHON = process.env.PYTHON_PATH || (existsSync(SERVER_PYTHON) ? SERVER_PYTHON : "python3");
 const SCRIPT = path.join(process.cwd(), "scripts", "collect.py");
 
 export function runCollector(): Promise<string> {

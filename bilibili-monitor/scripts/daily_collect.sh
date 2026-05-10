@@ -6,9 +6,9 @@
 set -e
 
 PROJECT_DIR="/opt/embodied-marketing"
-LOG_DIR="$PROJECT_DIR/bilibili-monitor/scripts/logs"
-VENV_DIR="$PROJECT_DIR/venv"
-ENV_FILE="$PROJECT_DIR/bilibili-monitor/.env.local"
+LOG_DIR="$PROJECT_DIR/scripts/logs"
+VENV_DIR="/opt/embodied-marketing-venv"
+ENV_FILE="$PROJECT_DIR/.env.local"
 
 # 确保日志目录存在
 mkdir -p "$LOG_DIR"
@@ -30,7 +30,7 @@ if [ -f "$ENV_FILE" ]; then
     set +o allexport
 fi
 
-source "$VENV_DIR/bin/activate" && python3 bilibili-monitor/scripts/collect_v2.py >> "$LOG_FILE" 2>&1
+source "$VENV_DIR/bin/activate" && python3 scripts/collect.py >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
 
