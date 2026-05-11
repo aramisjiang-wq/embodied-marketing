@@ -61,6 +61,7 @@ export function findOrCreateUser(feishuUser: {
 
   if (existingUser) {
     // 更新用户信息（飞书信息可能变化）
+    const now = new Date().toISOString();
     database.prepare(`
       UPDATE users SET
         name = ?,
@@ -68,7 +69,7 @@ export function findOrCreateUser(feishuUser: {
         email = ?,
         mobile = ?,
         avatar_url = ?,
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = ?
       WHERE open_id = ?
     `).run(
       feishuUser.name,
@@ -76,6 +77,7 @@ export function findOrCreateUser(feishuUser: {
       feishuUser.email || null,
       feishuUser.mobile || null,
       feishuUser.avatar_url || null,
+      now,
       feishuUser.open_id
     );
 
@@ -117,21 +119,22 @@ export function updateUserLogin(
   userAgent?: string
 ): void {
   const database = getDb();
+  const now = new Date().toISOString();
 
   // 更新最后登录时间和登录次数
   database.prepare(`
     UPDATE users SET
-      last_login_at = CURRENT_TIMESTAMP,
+      last_login_at = ?,
       login_count = login_count + 1,
-      updated_at = CURRENT_TIMESTAMP
+      updated_at = ?
     WHERE id = ?
-  `).run(userId);
+  `).run(now, now, userId);
 
   // 记录登录日志
   database.prepare(`
-    INSERT INTO login_logs (user_id, ip_address, user_agent)
-    VALUES (?, ?, ?)
-  `).run(userId, ipAddress || null, userAgent || null);
+    INSERT INTO login_logs (user_id, ip_address, user_agent, login_at)
+    VALUES (?, ?, ?, ?)
+  `).run(userId, ipAddress || null, userAgent || null, now);
 }
 
 /**
@@ -163,9 +166,10 @@ export function updateUserRole(
 ): boolean {
   try {
     const database = getDb();
+    const now = new Date().toISOString();
     database
-      .prepare("UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(role, userId);
+      .prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?")
+      .run(role, now, userId);
     return true;
   } catch (error) {
     console.error("[DB/updateUserRole] Error:", error);
@@ -182,9 +186,10 @@ export function updateUserStatus(
 ): boolean {
   try {
     const database = getDb();
+    const now = new Date().toISOString();
     database
-      .prepare("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(status, userId);
+      .prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?")
+      .run(status, now, userId);
     return true;
   } catch (error) {
     console.error("[DB/updateUserStatus] Error:", error);
@@ -256,16 +261,18 @@ export function recordActionLog(params: {
   ipAddress?: string;
 }): void {
   const database = getDb();
+  const now = new Date().toISOString();
   database.prepare(`
-    INSERT INTO action_logs (user_id, action, target_type, target_id, details, ip_address)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO action_logs (user_id, action, target_type, target_id, details, ip_address, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     params.userId,
     params.action,
     params.targetType || null,
     params.targetId || null,
     params.details || null,
-    params.ipAddress || null
+    params.ipAddress || null,
+    now
   );
 }
 
