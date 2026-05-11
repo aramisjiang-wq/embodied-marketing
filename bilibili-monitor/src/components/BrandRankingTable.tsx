@@ -131,12 +131,15 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
     }
   };
 
+  // 用当前排序后的列表预计算排名，key=brand.id value=rank(1-based)
+  const rankMap = useMemo(() => {
+    const map = new Map<number, number>();
+    filteredAndSorted.forEach((b, i) => map.set(b.id, i + 1));
+    return map;
+  }, [filteredAndSorted]);
+
   const selfBrand = activeData.find((b) => b.is_self === 1);
-  const selfRank =
-    selfBrand &&
-    [...activeData]
-      .sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
-      .findIndex((b) => b.id === selfBrand.id) + 1;
+  const selfRank = selfBrand ? (rankMap.get(selfBrand.id) ?? "-") : "-";
 
   if (activeData.length === 0 && !yearLoading) {
     return (
@@ -232,7 +235,7 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
               </span>
             </div>
             <div className="flex items-center gap-3 text-xs text-blue-700">
-              <span>排名：第 {selfRank || "-"} 名</span>
+              <span>排名：第 {selfRank} 名</span>
               <span>视频：{selfBrand.video_count || 0}</span>
               <span>播放：{formatNumber(selfBrand.total_views || 0)}</span>
             </div>
@@ -315,10 +318,7 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedData.map((brand) => {
-              const globalIndex =
-                [...activeData]
-                  .sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
-                  .findIndex((b) => b.id === brand.id) + 1;
+              const globalIndex = rankMap.get(brand.id) ?? 0;
               const isSelf = brand.is_self === 1;
 
               return (
