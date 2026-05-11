@@ -304,18 +304,9 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
                 </div>
               </th>
               <th
-                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort("follower")}
+                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                <div className="flex items-center justify-end gap-1">
-                  粉丝数
-                  {sortField === "follower" &&
-                    (sortOrder === "asc" ? (
-                      <ChevronUp className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    ))}
-                </div>
+                粉丝数
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 操作
