@@ -30,6 +30,12 @@ tar czf /tmp/embodied-deploy.tar.gz \
     --exclude='.next' \
     --exclude='.git' \
     --exclude='*.log' \
+    --exclude='*.db' \
+    --exclude='*.db-shm' \
+    --exclude='*.db-wal' \
+    --exclude='.env.local' \
+    --exclude='scripts/collect_status.json' \
+    --exclude='scripts/logs' \
     -C "$LOCAL_DIR" .
 
 if [ $? -eq 0 ]; then
@@ -45,8 +51,10 @@ cat /tmp/embodied-deploy.tar.gz | ssh $SERVER "
     set -e
     echo '   📥 接收文件...'
     cd $REMOTE_DIR
+    cp scripts/collect_status.json /tmp/collect_status.json.bak 2>/dev/null || true
     rm -rf src public scripts docs next.config.ts package.json tsconfig.json tailwind.config.ts postcss.config.js
     tar xz
+    [ -f /tmp/collect_status.json.bak ] && mv /tmp/collect_status.json.bak scripts/collect_status.json
     echo '   ✅ 文件解压完成'
 "
 
@@ -83,7 +91,7 @@ echo "构建项目..."
 npm run build 2>&1 | tail -20
 
 echo "启动服务..."
-pm2 start npm --name "embodied-marketing" -- start -p 8082
+pm2 start npm --name "embodied-marketing" -- start -- -p 8082
 pm2 save
 
 echo ""
