@@ -28,7 +28,6 @@ export default function ComparePage() {
   const selectedBrandData = filterBrands.filter((b) => compareBrands.includes(b.id));
   const loadingRef = useRef(false);
   const isMaxReached = compareBrands.length >= MAX_COMPARE_BRANDS;
-  const isMinReached = compareBrands.length >= MIN_COMPARE_BRANDS;
 
   // 当选择数量变化时，如果已经显示对比结果但数量不足，返回选择界面
   useEffect(() => {
@@ -219,7 +218,7 @@ export default function ComparePage() {
           {compareBrands.length >= MIN_COMPARE_BRANDS && isMaxReached === false && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 flex items-center gap-2">
               <span>✅</span>
-              还可再选 {MAX_COMPARE_BRANDS - compareBrands.length} 个厂家，或点击"开始对比"
+              还可再选 {MAX_COMPARE_BRANDS - compareBrands.length} 个厂家，或点击&quot;开始对比&quot;
             </div>
           )}
 
@@ -404,7 +403,7 @@ export default function ComparePage() {
           <div className="px-5 py-2.5 bg-gray-50 border-t border-gray-100">
             <p className="text-[11px] text-gray-400 flex items-center gap-1">
               <span>📅</span>
-              <span>数据范围：最近12个月</span>
+              <span>数据范围：{period === "week" ? "最近12周" : "最近12个月"}</span>
             </p>
           </div>
         </Card>

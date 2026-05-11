@@ -417,16 +417,16 @@ export function getComparisonData(brandIds: number[], months: number = 12): Bran
   // 生成完整的月份序列（包含当前月份在内的最近N个月）
   const result: BrandPeriodStat[] = [];
   const now = new Date();
-  // 从上个月往前推(months-1)个月，然后循环months+1次以包含当前月
-  // 简化方案：直接从(months-1)个月前开始，包含当前月共months个月份
-  const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1) + 1, 1);
+  const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const formatMonth = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
   // 获取所有品牌ID和名称
   const brands = [...new Map(rawData.map(d => [d.brand_id, d.brand_name])).entries()]
     .map(([id, name]) => ({ id, name }));
 
   for (let i = 0; i < months; i++) {
-    const monthStr = startDate.toISOString().slice(0, 7); // "2026-05"
+    const monthStr = formatMonth(startDate); // "2026-05"
 
     for (const brand of brands) {
       const existingData = rawData.find(
