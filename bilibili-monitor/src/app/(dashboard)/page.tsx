@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const [trendData, setTrendData] = useState<BrandPeriodStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [brandSearch, setBrandSearch] = useState("");
-  const [viewType, setViewType] = useState<ViewType>("cards");
+  const [viewType, setViewType] = useState<ViewType>("ranking");
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [collectStatus, setCollectStatus] = useState<{
     is_running: boolean;

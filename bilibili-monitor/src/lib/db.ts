@@ -259,6 +259,51 @@ export function getBrandsWithStats(): BrandWithStats[] {
   `).all() as BrandWithStats[];
 }
 
+/**
+ * 返回各厂家在指定自然年（按视频发布年份）的视频数和最新播放量聚合。
+ * 语义：该年发布的视频，取各视频最新一次采集的播放量之和。
+ * 不修改数据库 schema，纯只读查询。
+ */
+export function getBrandsWithStatsByYear(year: string): BrandWithStats[] {
+  const database = getDb();
+  return database.prepare(`
+    SELECT
+      b.*,
+      COALESCE(bs.follower, 0) as follower,
+      COALESCE(bs.following, 0) as following,
+      COUNT(DISTINCT v.id) as video_count,
+      COALESCE(SUM(ls.view), 0) as total_views,
+      MAX(ls.stat_date) as last_update
+    FROM brands b
+    LEFT JOIN brand_stats bs ON b.id = bs.brand_id
+    LEFT JOIN videos v ON b.id = v.brand_id
+      AND strftime('%Y', v.pub_date) = ?
+    LEFT JOIN (
+      SELECT vs.video_id, vs.view, vs.stat_date
+      FROM video_stats vs
+      INNER JOIN (
+        SELECT video_id, MAX(stat_date) AS max_date
+        FROM video_stats
+        GROUP BY video_id
+      ) mx ON vs.video_id = mx.video_id AND vs.stat_date = mx.max_date
+    ) ls ON v.id = ls.video_id
+    GROUP BY b.id
+    ORDER BY total_views DESC
+  `).all(year) as BrandWithStats[];
+}
+
+/** 返回数据库中视频有记录的年份列表（降序），用于年份选择器。 */
+export function getAvailableYears(): string[] {
+  const database = getDb();
+  const rows = database.prepare(`
+    SELECT DISTINCT strftime('%Y', pub_date) AS year
+    FROM videos
+    WHERE pub_date IS NOT NULL
+    ORDER BY year DESC
+  `).all() as { year: string }[];
+  return rows.map((r) => r.year).filter(Boolean);
+}
+
 export function getVideosByBrand(brandId: number): VideoWithStats[] {
   const database = getDb();
   return database.prepare(`
@@ -270,6 +315,9 @@ export function getVideosByBrand(brandId: number): VideoWithStats[] {
            COALESCE(vs.reply, 0) as reply
     FROM videos v
     LEFT JOIN video_stats vs ON v.id = vs.video_id
+      AND vs.stat_date = (
+        SELECT MAX(stat_date) FROM video_stats WHERE video_id = v.id
+      )
     WHERE v.brand_id = ?
     ORDER BY v.pub_ts DESC
   `).all(brandId) as VideoWithStats[];
