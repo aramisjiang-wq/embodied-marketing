@@ -3,7 +3,7 @@
 > **项目名称**：B站竞品监控 (Bilibili Competitor Monitor)
 > **技术栈**：Next.js 16 + TypeScript + SQLite + Recharts + Tailwind CSS
 > **创建时间**：2026-05-06
-> **当前版本**：v2.36.0-ranking-year-filter
+> **当前版本**：v2.36.1-deploy-db-hotfix
 
 ---
 
@@ -11,6 +11,7 @@
 
 | 版本 | 日期 | 类型 | 核心变更 | 状态 |
 |------|------|------|---------|------|
+| **v2.36.1-deploy-db-hotfix** | **2026-05-11** | **🔴 紧急修复：部署脚本覆盖生产数据库** | **①根因：deploy-simple.sh 的 tar 打包未排除 bilibili_monitor.db，将本地旧数据库（13品牌）上传覆盖了服务器生产数据库（17品牌）②恢复：通过 collect_status.json 日志还原4个丢失品牌名称，经 B站 API 搜索找回 MID（魔法原子/它石智航/自变量机器人/智平方），直接写回数据库③根治：deploy-simple.sh 打包命令新增 --exclude='*.db' --exclude='*.db-shm' --exclude='*.db-wal' --exclude='.env.local'，彻底防止生产数据再被覆盖④触发全量重新采集，补回丢失视频数据** | **✅ 完成** |
 | **v2.36.0-ranking-year-filter** | **2026-05-11** | **✨ 首页排名表默认展示 + 自然年筛选** | **①首页厂家清单默认视图改为排名表（原为卡片视图）②排名表新增自然年筛选按钮组（全部/各年份），按发布年份过滤厂家播放量和视频数③年份数据取各视频最新播放量（非跨日累加），语义准确④排序选项精简为总播放量和视频数（移除粉丝数和品牌名称排序）⑤新增 /api/ranking 接口（只读，不影响数据库和现有 API）⑥新增 db.getBrandsWithStatsByYear() 和 getAvailableYears() 两个只读函数** | **✅ 完成** |
 | **v2.35.0-deploy-status-fix** | **2026-05-11** | **🐛 部署覆盖采集状态修复** | **①排查首页数据采集卡片显示5.9日旧数据原因：部署脚本每次删除scripts/目录后解压本地代码包，导致服务器已更新的collect_status.json被本地旧版本覆盖②根因：deploy-simple-safe.sh和deploy-simple.sh均未将scripts/collect_status.json排除在打包/覆盖范围之外③修复方案：两个部署脚本的tar打包命令新增--exclude=scripts/collect_status.json和--exclude=scripts/logs，并在服务器端解压前备份、解压后还原该文件④立即修复线上：手动将服务器collect_status.json同步为数据库最新采集记录（05:30，12/12品牌，585视频）** | **✅ 完成** |
 | **v2.34.0-video-dedup-fix** | **2026-05-11** | **🐛 品牌视频列表重复数据修复** | **①修复品牌详情页视频列表（如宇树显示106条）出现重复视频问题②根因：`getVideosByBrand` SQL LEFT JOIN video_stats 未限定最新日期，导致每个视频因多天采集记录被重复输出N次③修复方案：JOIN 条件增加子查询 `AND vs.stat_date = (SELECT MAX(stat_date) FROM video_stats WHERE video_id = v.id)`，确保每个视频只取最新一条统计数据④部署到101.200.222.139:8082** | **✅ 完成** |
@@ -77,7 +78,66 @@
 | **v1.0.0** | **2026-05-06** | **🎉 初始版本** | **基础架构搭建、数据库设计、数据采集脚本** | **✅ 完成** |
 
 ---
-## ✨ v2.36.0-ranking-year-filter (当前版本)
+## 🔴 v2.36.1-deploy-db-hotfix (当前版本)
+
+**发布日期**：2026-05-11
+**版本类型**：🔴 **紧急修复：部署脚本误覆盖生产数据库**
+**状态**：✅ **已恢复并修复根因**
+**影响范围**：生产数据库、部署脚本
+**严重级别**：🔴 **高（生产数据丢失并恢复）**
+
+---
+
+### 📌 **事故经过**
+
+v2.36.0 部署时，`deploy-simple.sh` 的 `tar` 打包命令未排除 `bilibili_monitor.db`，将本地旧数据库（13个品牌，May 9 快照）上传并覆盖了服务器的生产数据库（17个品牌，含当日采集数据）。导致4个品牌（魔法原子、它石智航、自变量机器人、智平方）及其视频采集数据丢失。
+
+---
+
+### ✅ **恢复步骤**
+
+#### 1. **品牌数据恢复**
+- 通过 `collect_status.json` 的采集日志，确认丢失的4个品牌名称及其 B站用户名/粉丝数
+- 使用 B站搜索 API（带 SESSDATA 认证）精确匹配4个品牌的 MID：
+
+| 品牌 | B站MID | 匹配依据 |
+|------|--------|---------|
+| 魔法原子 | 3493132123507310 | 粉丝6073吻合 |
+| 它石智航 | 1894853857 | 用户名「小初生Eric」粉丝60吻合 |
+| 自变量机器人 | 3546800709438203 | 用户名「自变量机器人」粉丝1667吻合 |
+| 智平方 | 3546888859027863 | 用户名「智平方科技」粉丝314吻合 |
+
+- `INSERT OR IGNORE INTO brands` 写回数据库，品牌数恢复至17个
+
+#### 2. **视频数据恢复**
+- 触发全量 `collect.py` 采集，后台补回4个品牌的全部历史视频数据
+
+#### 3. **根因修复（deploy-simple.sh）**
+
+```bash
+# 修复前（缺失关键排除项）
+tar czf /tmp/embodied-deploy.tar.gz \
+    --exclude='node_modules' --exclude='.next' --exclude='.git' ...
+
+# 修复后（新增DB和env排除）
+tar czf /tmp/embodied-deploy.tar.gz \
+    --exclude='node_modules' --exclude='.next' --exclude='.git' \
+    --exclude='*.db' --exclude='*.db-shm' --exclude='*.db-wal' \
+    --exclude='.env.local' \
+    ...
+```
+
+---
+
+### 📝 **预防措施**
+
+- `deploy-simple.sh` 永久排除所有 `*.db*` 文件
+- `.env.local` 同样排除，防止服务器配置被覆盖
+- 后续所有部署脚本变更需检查 exclude 列表是否包含 `*.db`
+
+---
+
+## ✨ v2.36.0-ranking-year-filter
 
 **发布日期**：2026-05-11
 **版本类型**：✨ **首页排名表默认展示 + 自然年筛选**
