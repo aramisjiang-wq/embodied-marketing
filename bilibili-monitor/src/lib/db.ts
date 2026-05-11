@@ -259,40 +259,6 @@ export function getBrandsWithStats(): BrandWithStats[] {
   `).all() as BrandWithStats[];
 }
 
-/** 自然年内发布的视频：计数与播放量为累计口径（与 getBrandsWithStats / 月度聚合一致）；粉丝数为最新一条品牌快照，仅展示、不参与聚合。 */
-export function getBrandsWithStatsForYear(year: number): BrandWithStats[] {
-  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-    throw new Error("Invalid year");
-  }
-  const database = getDb();
-  const yearStr = String(year);
-  return database.prepare(`
-    SELECT
-      b.*,
-      COALESCE(latest_bs.follower, 0) as follower,
-      COALESCE(latest_bs.following, 0) as following,
-      COUNT(DISTINCT v.id) as video_count,
-      COALESCE(SUM(vs.view), 0) as total_views,
-      MAX(vs.stat_date) as last_update
-    FROM brands b
-    LEFT JOIN (
-      SELECT bs.brand_id, bs.follower, bs.following
-      FROM brand_stats bs
-      JOIN (
-        SELECT brand_id, MAX(stat_date) AS max_date
-        FROM brand_stats
-        GROUP BY brand_id
-      ) latest ON bs.brand_id = latest.brand_id AND bs.stat_date = latest.max_date
-    ) latest_bs ON b.id = latest_bs.brand_id
-    LEFT JOIN videos v ON b.id = v.brand_id
-      AND v.pub_date IS NOT NULL
-      AND strftime('%Y', v.pub_date) = ?
-    LEFT JOIN video_stats vs ON v.id = vs.video_id
-    GROUP BY b.id
-    ORDER BY total_views DESC
-  `).all(yearStr) as BrandWithStats[];
-}
-
 export function getVideosByBrand(brandId: number): VideoWithStats[] {
   const database = getDb();
   return database.prepare(`

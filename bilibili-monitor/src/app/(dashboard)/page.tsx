@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, startTransition } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Video, Eye, Users, Plus, Activity, CheckCircle, Clock, TrendingUp } from "lucide-react";
 import { BrandHeatmap } from "@/components/BrandHeatmap";
@@ -32,9 +32,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [brandSearch, setBrandSearch] = useState("");
   const [viewType, setViewType] = useState<ViewType>("cards");
-  const [rankingYear, setRankingYear] = useState(() => new Date().getFullYear());
-  const [yearRankingBrands, setYearRankingBrands] = useState<BrandData[]>([]);
-  const [yearRankingLoading, setYearRankingLoading] = useState(false);
   const [showAddBrandModal, setShowAddBrandModal] = useState(false);
   const [collectStatus, setCollectStatus] = useState<{
     is_running: boolean;
@@ -137,38 +134,6 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [selectedBrands, period, selectedYear]);
 
-  useEffect(() => {
-    if (viewType !== "ranking") return;
-    let cancelled = false;
-    setYearRankingLoading(true);
-    setYearRankingBrands([]);
-    fetch(`/api/brands/year-stats?year=${rankingYear}`)
-      .then((res) => res.json())
-      .then(
-        (payload: {
-          success?: boolean;
-          data?: { brands?: BrandData[] };
-        }) => {
-          if (cancelled || !payload.success || !payload.data?.brands) {
-            if (!cancelled && payload.success === false) {
-              setYearRankingBrands([]);
-            }
-            return;
-          }
-          setYearRankingBrands(payload.data.brands);
-        }
-      )
-      .catch(() => {
-        if (!cancelled) setYearRankingBrands([]);
-      })
-      .finally(() => {
-        if (!cancelled) setYearRankingLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [viewType, rankingYear]);
-
   const selectedBrandData = brands.filter((b) =>
     selectedBrands.includes(b.id)
   );
@@ -186,11 +151,6 @@ export default function DashboardPage() {
         b.name.toLowerCase().includes(brandSearch.toLowerCase())
       )
     : brands;
-
-  const rankingTableData = useMemo(() => {
-    if (yearRankingBrands.length === 0) return [];
-    return yearRankingBrands.filter((b) => selectedBrands.includes(b.id));
-  }, [yearRankingBrands, selectedBrands]);
 
   const handleAddBrand = () => {
     setShowAddBrandModal(true);
@@ -701,19 +661,9 @@ export default function DashboardPage() {
           />
         )}
 
-        {viewType === "ranking" &&
-          (yearRankingLoading && yearRankingBrands.length === 0 ? (
-            <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-              加载自然年排名中…
-            </div>
-          ) : (
-            <BrandRankingTable
-              data={rankingTableData}
-              title="厂家自然年排名"
-              calendarYear={rankingYear}
-              onCalendarYearChange={setRankingYear}
-            />
-          ))}
+        {viewType === "ranking" && (
+          <BrandRankingTable data={selectedBrandData} title="品牌排名总览" />
+        )}
       </Card>
     </div>
   );
