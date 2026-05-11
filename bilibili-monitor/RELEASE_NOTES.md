@@ -3,7 +3,7 @@
 > **项目名称**：B站竞品监控 (Bilibili Competitor Monitor)
 > **技术栈**：Next.js 16 + TypeScript + SQLite + Recharts + Tailwind CSS
 > **创建时间**：2026-05-06
-> **当前版本**：v2.32.0-production-stabilization
+> **当前版本**：v2.33.0-login-time-fix
 
 ---
 
@@ -11,6 +11,7 @@
 
 | 版本 | 日期 | 类型 | 核心变更 | 状态 |
 |------|------|------|---------|------|
+| **v2.33.0-login-time-fix** | **2026-05-11** | **🔧 系统管理用户登录时间显示修复** | **①修复系统管理中用户登录时间不准确问题（SQLite CURRENT_TIMESTAMP时区问题，改用JavaScript new Date().toISOString()）②修改updateUserLogin/findOrCreateUser/updateUserRole/updateUserStatus/recordActionLog五个函数的时间记录方式③部署到101.200.222.139:8082并同步GitHub④更新运维记录文档格式** | **✅ 完成** |
 | **v2.32.0-production-stabilization** | **2026-05-10** | **🚀 首次生产上线稳定化+飞书登录+采集链路修复** | **①完成本地/GitHub/服务器代码一致性校准并部署到101.200.222.139:8082 ②修复飞书OAuth2登录链路（直接授权跳转、v2 token响应解析、0.0.0.0回调、HTTP Cookie secure策略）③修复/api/trends 500（brands.is_self字段与旧库迁移）④迁移本地历史SQLite数据到服务器 ⑤配置Bilibili Cookie并修复cron加载.env.local ⑥权限调整为普通用户可添加品牌、仅管理员可删除品牌 ⑦首页新增管理员「立即采集」按钮和实时采集过程展示 ⑧修复采集脚本兼容bilibili-api-python 16.3.0（get_videos备用接口、Credential注入、状态文件和数据库写入）⑨修复collect-history数据库路径和手动采集Python路径 ⑩将Python venv移出项目根目录，解决Turbopack构建panic ⑪修复/admin用户列表空白的session自修复入库 ⑫新增运维记录文档并整理长期采集维护方案 ⑬完成三端代码收口（本地/GitHub/服务器运行代码一致，服务器env/数据库保持独立）⑭修复首页/全局添加厂家未真正提交和品牌详情近12个月月度统计/趋势图数据错乱问题 ⑮品牌详情页删除入口收口为仅管理员可见，与后端requireAdmin保持一致** | **✅ 完成** |
 | **v2.31.1-security** | **2026-05-09** | **🛡️ API安全修复+生产级部署系统** | **①🔴 修复品牌CRUD API权限漏洞（viewer角色可创建/编辑/删除品牌）②新增通用权限验证函数（requireRole/requireAdmin/requireEditor）③完善采集API权限控制（仅editor+可触发）④创建生产级部署脚本（自动备份+增量合并+健康检查+回滚支持）⑤数据库安全迁移策略（INSERT OR IGNORE保留双方数据）⑥更新SPEC/PRD文档至v2.31.1⑦完善部署指南和操作手册** | **✅ 完成** |
 | **v2.31.0** | **2026-05-09** | **🔐 飞书扫码登录+企业级用户管理体系** | **①新增飞书OAuth2扫码登录（专业登录页+二维码SDK集成）②实现完整用户管理系统（users/login_logs/action_logs三张表）③三级角色权限体系（admin/editor/viewer）④管理员后台页面（/admin，用户CRUD+统计面板+日志查看）⑤路由中间件保护（未登录自动跳转/login）⑥Session持久化（HttpOnly Cookie+7天过期）⑦登录审计日志（IP/User-Agent/时间戳）⑧用户状态管理（启用/禁用账号）⑨第一个注册用户自动成为admin⑩侧边栏动态显示"系统管理"入口（仅admin可见）** | **✅ 完成** |
@@ -73,7 +74,71 @@
 | **v1.0.0** | **2026-05-06** | **🎉 初始版本** | **基础架构搭建、数据库设计、数据采集脚本** | **✅ 完成** |
 
 ---
-## 🚀 v2.32.0-production-stabilization (当前版本)
+## 🔧 v2.33.0-login-time-fix (当前版本)
+
+**发布日期**：2026-05-11
+**版本类型**：🔧 **系统管理用户登录时间显示修复**
+**状态**：✅ **已完成并部署到生产环境**
+**影响范围**：用户管理模块、登录日志、时间记录方式
+**严重级别**：🟡 **中（用户体验修复）**
+
+---
+
+### 📌 **版本概述**
+
+本版本修复了系统管理中用户登录时间显示不准确的问题。问题根源是使用 SQLite 的 `CURRENT_TIMESTAMP` 记录时间时，时区处理不一致，导致前端显示的时间与实际本地时间有偏差。修复方案统一改用 JavaScript 的 `new Date().toISOString()` 来记录所有时间戳，确保时区一致性。
+
+---
+
+### ✅ **修复内容**
+
+#### 1. **问题根源分析**
+- **问题**：SQLite `CURRENT_TIMESTAMP` 返回 UTC 时间，但未正确处理时区转换
+- **影响**：用户看到的登录时间与实际时间有偏差（通常差 8 小时，中国时区）
+- **范围**：`users.last_login_at`、`login_logs.login_at`、`action_logs.created_at`、`users.updated_at`
+
+#### 2. **修复方案**
+- 统一使用 JavaScript `new Date().toISOString()` 替代 SQLite `CURRENT_TIMESTAMP`
+- 确保所有时间戳使用统一的 ISO 8601 格式
+- 前端 `toLocaleString()` 可以正确解析并显示本地时间
+
+#### 3. **修改的函数**
+
+| 函数 | 文件 | 修改内容 |
+|------|------|---------|
+| `updateUserLogin()` | `src/lib/user-db.ts` | 使用 `toISOString()` 记录 `last_login_at` 和 `login_at` |
+| `findOrCreateUser()` | `src/lib/user-db.ts` | 更新用户信息时使用 `toISOString()` 记录 `updated_at` |
+| `updateUserRole()` | `src/lib/user-db.ts` | 更新角色时使用 `toISOString()` 记录 `updated_at` |
+| `updateUserStatus()` | `src/lib/user-db.ts` | 更新状态时使用 `toISOString()` 记录 `updated_at` |
+| `recordActionLog()` | `src/lib/user-db.ts` | 记录操作日志时使用 `toISOString()` 记录 `created_at` |
+
+#### 4. **部署同步**
+- ✅ 本地代码提交（Commit: `a7aab96`）
+- ✅ 推送到 GitHub（https://github.com/aramisjiang-wq/embodied-marketing）
+- ✅ 部署到服务器（101.200.222.139:8082）
+- ✅ PM2 服务重启成功
+
+---
+
+### 📝 **验证方式**
+
+1. 登录系统
+2. 访问系统管理页面（/admin）
+3. 查看用户列表的「最后登录」列
+4. 查看「登录日志」标签页的时间
+5. 确认时间与当前本地时间一致
+
+---
+
+### 🔄 **回滚方案**
+
+如有问题，可通过以下方式回滚：
+- Git 回滚：`git revert a7aab96`
+- 服务器：恢复备份目录 `/opt/embodied-marketing/backup/`
+
+---
+
+## 🚀 v2.32.0-production-stabilization
 
 **发布日期**：2026-05-10
 **版本类型**：🚀 **首次生产上线稳定化 + 登录认证修复 + 数据采集链路修复**
