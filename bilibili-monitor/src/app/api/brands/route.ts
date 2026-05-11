@@ -37,7 +37,10 @@ export async function POST(request: NextRequest) {
     const existingBrand = getBrandByMid(mid);
     if (existingBrand) {
       return NextResponse.json(
-        { success: false, error: `厂家已存在：${existingBrand.name}` },
+        {
+          success: false,
+          error: `该 MID 已在列表中：${existingBrand.name}（MID ${existingBrand.mid}）。无需重复添加；若显示名称有误，请在厂家列表对该条「编辑」改名。`,
+        },
         { status: 409 }
       );
     }
