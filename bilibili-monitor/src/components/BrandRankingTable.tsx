@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, startTransition } from "react";
+import { useState, useMemo, useEffect, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -19,10 +19,15 @@ interface BrandData extends BrandWithStats {
 interface RankingTableProps {
   data: BrandData[];
   title?: string;
-  showSortSelector?: boolean; // 是否显示排序选择器
+  showSortSelector?: boolean;
+  /** 统计口径：自然年（pub_date 落在该年内的视频） */
+  calendarYear: number;
+  onCalendarYearChange: (year: number) => void;
+  /** 可选年份下限，默认 2018 */
+  minCalendarYear?: number;
 }
 
-type SortField = "video_count" | "total_views" | "follower" | "name";
+type SortField = "video_count" | "total_views";
 type SortOrder = "asc" | "desc";
 
 function formatNumber(num: number): string {
@@ -31,7 +36,14 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
-export function BrandRankingTable({ data, title, showSortSelector = true }: RankingTableProps) {
+export function BrandRankingTable({
+  data,
+  title,
+  showSortSelector = true,
+  calendarYear,
+  onCalendarYearChange,
+  minCalendarYear = 2018,
+}: RankingTableProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("total_views");
@@ -39,17 +51,27 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  // 使用智能调色板生成颜色
+  const maxCalendarYear = new Date().getFullYear();
+
+  const yearOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let y = maxCalendarYear; y >= minCalendarYear; y -= 1) {
+      list.push(y);
+    }
+    return list;
+  }, [maxCalendarYear, minCalendarYear]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data, calendarYear, sortField, sortOrder, searchTerm]);
+
+  // 播放量顺序分配颜色条（与产品“排名以播放量/视频数为准”一致，颜色按年度总播放序）
   const palette = useMemo(() => getSmartPalette(data.length), [data.length]);
 
-  // 创建品牌ID到颜色的映射
   const brandColorMap = useMemo(() => {
     const map = new Map<number, ColorPalette>();
     let nonSelfIndex = 0;
-    
-    // 先按播放量排序确定颜色分配顺序
     const sortedData = [...data].sort((a, b) => (b.total_views || 0) - (a.total_views || 0));
-    
     sortedData.forEach((brand) => {
       if (brand.is_self === 1) {
         map.set(brand.id, getSelfBrandColors());
@@ -58,31 +80,30 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
         nonSelfIndex++;
       }
     });
-    
     return map;
   }, [data, palette]);
 
   const filteredAndSorted = useMemo(() => {
     let filtered = data;
-
     if (searchTerm) {
       filtered = data.filter((brand) =>
         brand.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
     return [...filtered].sort((a, b) => {
-      let aVal: number | string = a[sortField] || 0;
-      let bVal: number | string = b[sortField] || 0;
-
-      if (typeof aVal === "string") aVal = aVal.toLowerCase();
-      if (typeof bVal === "string") bVal = bVal.toLowerCase();
-
+      const aVal = (a[sortField] || 0) as number;
+      const bVal = (b[sortField] || 0) as number;
       if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
       if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
-      return 0;
+      return (a.name || "").localeCompare(b.name || "", "zh-CN");
     });
   }, [data, searchTerm, sortField, sortOrder]);
+
+  const rankByBrandId = useMemo(() => {
+    const map = new Map<number, number>();
+    filteredAndSorted.forEach((b, i) => map.set(b.id, i + 1));
+    return map;
+  }, [filteredAndSorted]);
 
   const totalPages = Math.ceil(filteredAndSorted.length / pageSize);
   const paginatedData = filteredAndSorted.slice(
@@ -100,11 +121,10 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
   };
 
   const selfBrand = data.find((b) => b.is_self === 1);
-  const selfRank =
-    selfBrand &&
-    [...data]
-      .sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
-      .findIndex((b) => b.id === selfBrand.id) + 1;
+  const selfRank = selfBrand ? rankByBrandId.get(selfBrand.id) ?? null : null;
+
+  const sortLabel =
+    sortField === "total_views" ? "年度总播放量" : "年度发布视频数";
 
   if (data.length === 0) {
     return (
@@ -116,24 +136,39 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
 
   return (
     <div>
-      {/* Header with title and sort selector */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-3">
           {title && (
             <h3 className="text-xs text-gray-500 uppercase tracking-wide">
               {title}
             </h3>
           )}
-          {/* Ranking basis indicator */}
-          <div className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
-            排序: {sortField === "total_views" ? "总播放量" : sortField === "video_count" ? "视频数" : sortField === "follower" ? "粉丝数" : "品牌名"} ({sortOrder === "desc" ? "降序" : "升序"})
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-gray-500">自然年</span>
+            <select
+              value={calendarYear}
+              onChange={(e) => {
+                const y = Number.parseInt(e.target.value, 10);
+                if (!Number.isFinite(y)) return;
+                onCalendarYearChange(y);
+              }}
+              className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y} 年
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded max-w-xl leading-snug">
+            口径：{calendarYear} 年内按发布日期统计的视频条数与播放量（累计至最近采集）；粉丝数仅展示，不参与排名
           </div>
         </div>
 
-        {/* Sort selector */}
         {showSortSelector && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">排序依据:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500">排序依据（排名）</span>
             <select
               value={sortField}
               onChange={(e) => {
@@ -144,17 +179,17 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
             >
               <option value="total_views">总播放量</option>
               <option value="video_count">视频数</option>
-              <option value="follower">粉丝数</option>
-              <option value="name">品牌名称</option>
             </select>
+            <span className="text-xs text-gray-400">
+              {sortLabel}（{sortOrder === "desc" ? "降序" : "升序"}）
+            </span>
           </div>
         )}
       </div>
 
-      {/* 自己的品牌高亮卡片 */}
       {selfBrand && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Crown className="w-4 h-4 text-blue-600" />
               <span className="text-sm font-medium text-blue-900">
@@ -162,7 +197,7 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
               </span>
             </div>
             <div className="flex items-center gap-3 text-xs text-blue-700">
-              <span>排名：第 {selfRank || "-"} 名</span>
+              <span>按当前排序：第 {selfRank ?? "-"} 名</span>
               <span>视频：{selfBrand.video_count || 0}</span>
               <span>播放：{formatNumber(selfBrand.total_views || 0)}</span>
             </div>
@@ -170,7 +205,6 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
         </div>
       )}
 
-      {/* 搜索和筛选 */}
       <div className="mb-3 flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -190,38 +224,15 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
         </div>
       </div>
 
-      {/* 表格 */}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort("name")}
-              >
-                <div className="flex items-center gap-1">
-                  排名
-                  {sortField === "name" &&
-                    (sortOrder === "asc" ? (
-                      <ChevronUp className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    ))}
-                </div>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                排名
               </th>
-              <th
-                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort("name")}
-              >
-                <div className="flex items-center gap-1">
-                  品牌名称
-                  {sortField === "name" &&
-                    (sortOrder === "asc" ? (
-                      <ChevronUp className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    ))}
-                </div>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                品牌名称
               </th>
               <th
                 className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -251,19 +262,8 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
                     ))}
                 </div>
               </th>
-              <th
-                className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                onClick={() => handleSort("follower")}
-              >
-                <div className="flex items-center justify-end gap-1">
-                  粉丝数
-                  {sortField === "follower" &&
-                    (sortOrder === "asc" ? (
-                      <ChevronUp className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    ))}
-                </div>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                粉丝数
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 操作
@@ -272,10 +272,7 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedData.map((brand) => {
-              const globalIndex =
-                [...data]
-                  .sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
-                  .findIndex((b) => b.id === brand.id) + 1;
+              const rank = rankByBrandId.get(brand.id) ?? 0;
               const isSelf = brand.is_self === 1;
 
               return (
@@ -290,11 +287,13 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      {globalIndex <= 3 && (
-                        <span className="text-lg">{globalIndex === 1 ? "🥇" : globalIndex === 2 ? "🥈" : "🥉"}</span>
+                      {rank > 0 && rank <= 3 && (
+                        <span className="text-lg">
+                          {rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}
+                        </span>
                       )}
                       {!isSelf && (
-                        <span className="text-gray-600 font-medium">#{globalIndex}</span>
+                        <span className="text-gray-600 font-medium">#{rank}</span>
                       )}
                       {isSelf && (
                         <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full font-medium">
@@ -305,12 +304,14 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-3">
-                      {/* 颜色标识条 */}
                       <div
                         className="w-1.5 h-8 rounded-full flex-shrink-0"
                         style={{
-                          backgroundColor: brandColorMap.get(brand.id)?.solid || "#94A3B8",
-                          boxShadow: isSelf ? `0 0 6px ${brandColorMap.get(brand.id)?.border}` : "none"
+                          backgroundColor:
+                            brandColorMap.get(brand.id)?.solid || "#94A3B8",
+                          boxShadow: isSelf
+                            ? `0 0 6px ${brandColorMap.get(brand.id)?.border}`
+                            : "none",
                         }}
                       ></div>
                       <span
@@ -354,7 +355,6 @@ export function BrandRankingTable({ data, title, showSortSelector = true }: Rank
         </table>
       </div>
 
-      {/* 分页 */}
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-between text-sm">
           <div className="text-gray-500">
