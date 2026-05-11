@@ -3,7 +3,7 @@
 > **项目名称**：B站竞品监控 (Bilibili Competitor Monitor)
 > **技术栈**：Next.js 16 + TypeScript + SQLite + Recharts + Tailwind CSS
 > **创建时间**：2026-05-06
-> **当前版本**：v2.36.1-deploy-db-hotfix
+> **当前版本**：v2.36.2-ranking-sort-fix
 
 ---
 
@@ -11,6 +11,7 @@
 
 | 版本 | 日期 | 类型 | 核心变更 | 状态 |
 |------|------|------|---------|------|
+| **v2.36.2-ranking-sort-fix** | **2026-05-11** | **🐛 排名表序号跟随排序字段修复** | **①修复排名表切换「视频数」排序时，序号/奖牌/您的品牌排名仍按播放量显示的问题②根因：globalIndex 和 selfRank 硬编码按 total_views 重新排序，与 sortField 无关③修复方案：用 useMemo 基于 filteredAndSorted 预计算 rankMap（O(n)），序号直接查 map，跟随当前排序字段动态更新** | **✅ 完成** |
 | **v2.36.1-deploy-db-hotfix** | **2026-05-11** | **🔴 紧急修复：部署脚本覆盖生产数据库** | **①根因：deploy-simple.sh 的 tar 打包未排除 bilibili_monitor.db，将本地旧数据库（13品牌）上传覆盖了服务器生产数据库（17品牌）②恢复：通过 collect_status.json 日志还原4个丢失品牌名称，经 B站 API 搜索找回 MID（魔法原子/它石智航/自变量机器人/智平方），直接写回数据库③根治：deploy-simple.sh 打包命令新增 --exclude='*.db' --exclude='*.db-shm' --exclude='*.db-wal' --exclude='.env.local'，彻底防止生产数据再被覆盖④触发全量重新采集，补回丢失视频数据** | **✅ 完成** |
 | **v2.36.0-ranking-year-filter** | **2026-05-11** | **✨ 首页排名表默认展示 + 自然年筛选** | **①首页厂家清单默认视图改为排名表（原为卡片视图）②排名表新增自然年筛选按钮组（全部/各年份），按发布年份过滤厂家播放量和视频数③年份数据取各视频最新播放量（非跨日累加），语义准确④排序选项精简为总播放量和视频数（移除粉丝数和品牌名称排序）⑤新增 /api/ranking 接口（只读，不影响数据库和现有 API）⑥新增 db.getBrandsWithStatsByYear() 和 getAvailableYears() 两个只读函数** | **✅ 完成** |
 | **v2.35.0-deploy-status-fix** | **2026-05-11** | **🐛 部署覆盖采集状态修复** | **①排查首页数据采集卡片显示5.9日旧数据原因：部署脚本每次删除scripts/目录后解压本地代码包，导致服务器已更新的collect_status.json被本地旧版本覆盖②根因：deploy-simple-safe.sh和deploy-simple.sh均未将scripts/collect_status.json排除在打包/覆盖范围之外③修复方案：两个部署脚本的tar打包命令新增--exclude=scripts/collect_status.json和--exclude=scripts/logs，并在服务器端解压前备份、解压后还原该文件④立即修复线上：手动将服务器collect_status.json同步为数据库最新采集记录（05:30，12/12品牌，585视频）** | **✅ 完成** |
@@ -78,7 +79,42 @@
 | **v1.0.0** | **2026-05-06** | **🎉 初始版本** | **基础架构搭建、数据库设计、数据采集脚本** | **✅ 完成** |
 
 ---
-## 🔴 v2.36.1-deploy-db-hotfix (当前版本)
+## 🐛 v2.36.2-ranking-sort-fix (当前版本)
+
+**发布日期**：2026-05-11
+**版本类型**：🐛 **排名表序号跟随排序字段修复**
+**状态**：✅ **已完成并部署到生产环境**
+**影响范围**：`BrandRankingTable` 组件
+**严重级别**：🟡 **中（UI 逻辑错误）**
+
+### 问题描述
+
+排名表切换排序字段为「视频数」后，行首序号（#1/#2/#3...）、🥇🥈🥉 奖牌以及顶部"您的品牌排名"仍按「总播放量」显示，与表格实际排列顺序不一致。
+
+### 修复方案
+
+将每行独立计算 `globalIndex`（O(n²)，每次重新按 `total_views` 排序）改为：
+
+用 `useMemo` 基于已排序的 `filteredAndSorted` 列表预计算一个 `rankMap`（O(n)），序号直接查 map，随 `sortField` 动态更新。
+
+```ts
+// 修复前：每行按 total_views 硬排
+const globalIndex = [...activeData]
+  .sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
+  .findIndex((b) => b.id === brand.id) + 1;
+
+// 修复后：基于当前排序预计算
+const rankMap = useMemo(() => {
+  const map = new Map<number, number>();
+  filteredAndSorted.forEach((b, i) => map.set(b.id, i + 1));
+  return map;
+}, [filteredAndSorted]);
+const globalIndex = rankMap.get(brand.id) ?? 0;
+```
+
+---
+
+## 🔴 v2.36.1-deploy-db-hotfix
 
 **发布日期**：2026-05-11
 **版本类型**：🔴 **紧急修复：部署脚本误覆盖生产数据库**
